@@ -1,26 +1,210 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-deep: #0d0f0e;
+  --bg-panel: #141817;
+  --bg-elevated: #1a1d1b;
+  --amber-primary: #f5a623;
+  --amber-glow: rgba(245, 166, 35, 0.3);
+  --amber-dim: rgba(245, 166, 35, 0.15);
+  --green-primary: #4ade80;
+  --green-glow: rgba(74, 222, 128, 0.3);
+  --red-primary: #ef4444;
+  --red-glow: rgba(239, 68, 68, 0.3);
+  --text-primary: #e8e8e8;
+  --text-dim: #888;
+  --border-subtle: rgba(255, 255, 255, 0.08);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--bg-deep);
+  --color-foreground: var(--text-primary);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'IBM Plex Mono', monospace;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.1) 2px,
+    rgba(0, 0, 0, 0.1) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.4;
+}
+
+/* Font imports */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-deep);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(245, 166, 35, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 166, 35, 0.5);
+}
+
+/* Boot sequence animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s forwards;
+}
+
+.animate-pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--amber-primary);
+  animation: blink 1s step-end infinite;
+}
+
+/* Node highlight effect */
+.node-group.highlighted circle {
+  stroke: var(--amber-primary) !important;
+  stroke-width: 4px !important;
+  filter: drop-shadow(0 0 15px var(--amber-glow)) !important;
+}
+
+/* Tooltip styling */
+.tooltip-title {
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 1px;
+}
+
+/* Terminal styling */
+.terminal-input:focus {
+  outline: none;
+  border-color: var(--amber-primary);
+  box-shadow: 0 0 0 2px var(--amber-dim);
+}
+
+/* Modal backdrop */
+#code-viewer-modal {
+  backdrop-filter: blur(8px);
+}
+
+/* Upload zone hover */
+.upload-zone:hover {
+  border-color: rgba(245, 166, 35, 0.5);
+}
+
+/* Status indicator pulse */
+.status-indicator.active {
+  animation: pulse 1s infinite;
+}
+
+/* Graph legend */
+.graph-legend {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Badge styling */
+.badge {
+  font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: 0.05em;
+}
+
+/* Section titles */
+.section-title {
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0.1em;
+}
+
+/* Code blocks */
+.code-block code {
+  font-family: 'Courier Prime', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* Button transitions */
+.toolbar-btn, .tab-btn, .lang-btn, .demo-btn {
+  transition: all 0.2s ease;
+}
+
+.toolbar-btn:hover, .tab-btn:hover, .lang-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Gauge animation */
+.gauge-value {
+  transition: stroke-dasharray 1s ease-out;
+}
+
+/* Furniture */
+.border-subtle {
+  border-color: var(--border-subtle);
+}
+
+.bg-deep {
+  background-color: var(--bg-deep);
+}
+
+.bg-panel {
+  background-color: var(--bg-panel);
+}
+
+.bg-elevated {
+  background-color: var(--bg-elevated);
+}
+
+.text-amber {
+  color: var(--amber-primary);
+}
+
+.text-green {
+  color: var(--green-primary);
+}
+
+.text-red {
+  color: var(--red-primary);
+}
+
+.border-amber {
+  border-color: var(--amber-primary);
 }
