@@ -807,6 +807,75 @@
             background: #f5b823;
             box-shadow: 0 0 20px var(--amber-glow);
         }
+
+        .api-key-input {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .api-key-input input {
+            flex: 1;
+            background: var(--bg-deep);
+            border: 1px solid var(--amber-primary);
+            color: var(--amber-primary);
+            padding: 8px 12px;
+            font-family: 'Courier Prime', monospace;
+            font-size: 12px;
+            border-radius: 2px;
+        }
+
+        .api-key-btn {
+            padding: 8px 16px;
+            background: var(--amber-primary);
+            color: var(--bg-deep);
+            border: none;
+            border-radius: 2px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .export-btn {
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            color: var(--amber-primary);
+            border: 1px solid var(--amber-primary);
+            border-radius: 4px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 12px;
+            letter-spacing: 1px;
+            cursor: pointer;
+            margin-top: 16px;
+            transition: all 0.3s;
+        }
+
+        .export-btn:hover {
+            background: var(--amber-primary);
+            color: var(--bg-deep);
+        }
+
+        .export-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .alert-banner {
+            background: var(--red-glow);
+            border: 1px solid var(--red-primary);
+            color: var(--red-primary);
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-size: 12px;
+            display: none;
+            animation: pulse 2s infinite;
+        }
+
+        .alert-banner.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -846,6 +915,12 @@
                 <span>⬡</span> EXCAVATION SITE
             </div>
             <div class="content">
+                <div id="apiKeySection">
+                    <div class="api-key-input">
+                        <input type="password" id="apiKeyInput" placeholder="Enter Anthropic API Key (optional)">
+                        <button class="api-key-btn" id="apiKeyBtn">SET</button>
+                    </div>
+                </div>
                 <div class="upload-zone" id="uploadZone">
                     <div class="upload-icon">⬡</div>
                     <div class="upload-text">
@@ -854,6 +929,10 @@
                         <br>
                         <small>ZIP • Individual Files • Raw Text</small>
                     </div>
+                </div>
+                <button class="demo-btn" id="demoBtn">LOAD DEMO CODEBASE</button>
+                <div class="alert-banner" id="alertBanner">
+                    ⚠️ CRITICAL ALERT: Circular dependencies detected!
                 </div>
                 <div class="file-list" id="fileList"></div>
             </div>
@@ -911,7 +990,33 @@
                     <div>No analysis yet</div>
                     <div style="font-size: 11px; margin-top: 8px;">Upload a codebase to begin archaeological analysis</div>
                 </div>
-                <div id="excavationReport" style="display: none;"></div>
+                <div id="excavationReport" style="display: none;">
+                    <div class="report-section">
+                        <div class="section-title">Executive Summary</div>
+                        <div class="section-content" id="execSummary"></div>
+                    </div>
+                    <div class="report-section">
+                        <div class="section-title">Business Domain</div>
+                        <div class="section-content" id="businessDomain"></div>
+                    </div>
+                    <div class="report-section">
+                        <div class="section-title">Architecture Pattern</div>
+                        <div class="section-content" id="archPattern"></div>
+                    </div>
+                    <div class="report-section">
+                        <div class="section-title">Top 5 Critical Files</div>
+                        <div class="section-content" id="criticalFiles"></div>
+                    </div>
+                    <div class="report-section">
+                        <div class="section-title">Tech Debt Score</div>
+                        <div class="section-content" id="debtScore"></div>
+                    </div>
+                    <div class="report-section">
+                        <div class="section-title">Risk Assessment</div>
+                        <div class="section-content" id="riskAssessment"></div>
+                    </div>
+                    <button class="export-btn" id="exportReportBtn">EXPORT FULL REPORT PDF</button>
+                </div>
             </div>
 
             <div class="tab-content" id="tab-deps">
@@ -923,7 +1028,7 @@
             </div>
 
             <div class="tab-content" id="tab-refactor">
-                <div class="empty-state">
+                <div class="empty-state" id="refactorEmpty">
                     <div class="empty-state-icon">⬡</div>
                     <div>No file selected</div>
                     <div style="font-size: 11px; margin-top: 8px;">Click a node in the dependency graph to generate a refactor blueprint</div>
@@ -981,15 +1086,17 @@
     </div>
 
     <script>
-        // ─── State ───────────────────────────────────────────────────────────────
+        // ─── Global State ─────────────────────────────────────────────────────────
         const state = {
             files: [],
             fileMap: {},
             dependencyGraph: { nodes: [], links: [] },
             analysis: null,
-            refactorTarget: null,
+            selectedNode: null,
             demoMode: false,
-            anthropicKey: ''
+            anthropicKey: localStorage.getItem('chronos_anthropic_key') || '',
+            issuesFound: 0,
+            isAnalyzing: false
         };
 
         // ─── Boot Sequence ───────────────────────────────────────────────────────
@@ -1002,6 +1109,31 @@
             }, 4000);
         });
 
+        // ─── API Key Management ──────────────────────────────────────────────────
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const apiKeyBtn = document.getElementById('apiKeyBtn');
+        const apiKeySection = document.getElementById('apiKeySection');
+
+        apiKeyInput.value = state.anthropicKey;
+        if (state.anthropicKey) {
+            apiKeyInput.style.borderColor = 'var(--green-primary)';
+        }
+
+        apiKeyBtn.addEventListener('click', () => {
+            const key = apiKeyInput.value.trim();
+            if (key) {
+                state.anthropicKey = key;
+                localStorage.setItem('chronos_anthropic_key', key);
+                apiKeyInput.style.borderColor = 'var(--green-primary)';
+                apiKeySection.style.opacity = '0.7';
+            } else {
+                state.anthropicKey = '';
+                localStorage.removeItem('chronos_anthropic_key');
+                apiKeyInput.style.borderColor = 'var(--amber-primary)';
+                apiKeySection.style.opacity = '1';
+            }
+        });
+
         // ─── Tab Navigation ──────────────────────────────────────────────────────
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -1009,10 +1141,18 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 btn.classList.add('active');
                 document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+
+                // Auto-load analysis when switching tabs
+                if (btn.dataset.tab === 'deps' && state.files.length > 0 && !state.analysis) {
+                    runDependencyAnalysis();
+                }
+                if (btn.dataset.tab === 'excavation' && state.files.length > 0 && !state.analysis) {
+                    runExcavationAnalysis();
+                }
             });
         });
 
-        // ─── File Upload ─────────────────────────────────────────────────────────
+        // ─── File Upload Processing ───────────────────────────────────────────────
         const uploadZone = document.getElementById('uploadZone');
         const fileList = document.getElementById('fileList');
 
@@ -1045,14 +1185,27 @@
         }
 
         async function handleFiles(files) {
-            for (const file of files) {
-                if (file.name.endsWith('.zip')) {
-                    await processZip(file);
-                } else {
-                    await processFile(file);
-                }
+            if (state.isAnalyzing) {
+                alert('Please wait for current analysis to complete.');
+                return;
             }
-            updateUI();
+
+            const loadingOverlay = showLoadingOverlay('PROCESSING UPLOAD...');
+
+            try {
+                for (const file of files) {
+                    if (file.name.endsWith('.zip')) {
+                        await processZip(file);
+                    } else {
+                        await processFile(file);
+                    }
+                }
+                updateUI();
+            } catch (err) {
+                alert('Error processing files: ' + err.message);
+            } finally {
+                removeLoadingOverlay(loadingOverlay);
+            }
         }
 
         async function processZip(zipFile) {
@@ -1081,7 +1234,8 @@
                 content: content,
                 language: detectLanguage(ext),
                 lines: content.split('\n').length,
-                loc: content.replace(/\s+/g, '').length
+                loc: content.replace(/\s+/g, '').length,
+                debtScore: estimateDebtScore(file.name, content)
             });
         }
 
@@ -1094,9 +1248,32 @@
                 'c': 'C', 'cpp': 'C++',
                 'php': 'PHP', 'rb': 'Ruby',
                 'pl': 'Perl', 'vb': 'Visual Basic',
-                'bas': 'BASIC', 'asm': 'Assembly'
+                'bas': 'BASIC', 'asm': 'Assembly',
+                'sql': 'SQL', 'xml': 'XML', 'json': 'JSON',
+                'cs': 'C#', 'go': 'Go', 'rs': 'Rust',
+                'kt': 'Kotlin', 'scala': 'Scala', 'swift': 'Swift'
             };
             return map[ext] || 'Text';
+        }
+
+        function estimateDebtScore(filename, content) {
+            let score = 20; // Base debt
+
+            // Heuristics for debt estimation
+            if (filename.toLowerCase().includes('legacy')) score += 30;
+            if (filename.toLowerCase().includes('old')) score += 25;
+            if (content.includes('FIXME') || content.includes('TODO')) score += 20;
+            if (content.includes('HACK') || content.includes('XXX')) score += 35;
+            if (content.includes('System.out.println')) score += 15;
+            if (content.includes('var ') && content.includes('function')) score += 10;
+            if (content.includes('goto')) score += 40;
+            if (content.includes('eval(')) score += 50;
+            if (content.includes('catch (Exception') && content.includes('{}')) score += 30;
+            if ((content.match(/\/\/.*\n/g) || []).length > content.length / 50) score += 15;
+            if (content.length > 5000) score += 20;
+            if (content.includes('synchronized') || content.includes('volatile')) score += 10;
+
+            return Math.min(100, score + Math.random() * 20);
         }
 
         function addFile(file) {
@@ -1104,6 +1281,36 @@
             state.fileMap[file.name] = file;
         }
 
+        function showLoadingOverlay(message) {
+            const overlay = document.createElement('div');
+            overlay.id = 'loadingOverlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(13, 15, 14, 0.95);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                z-index: 15000;
+                font-family: 'Courier Prime', monospace;
+                color: var(--amber-primary);
+            `;
+            overlay.innerHTML = `
+                <div class="spinner" style="width: 60px; height: 60px; margin-bottom: 20px;"></div>
+                <div style="font-size: 18px;">${message}</div>
+            `;
+            document.body.appendChild(overlay);
+            return overlay;
+        }
+
+        function removeLoadingOverlay(overlay) {
+            if (overlay && overlay.parentNode) {
+                overlay.parentNode.removeChild(overlay);
+            }
+        }
+
+        // ─── UI State Updates ─────────────────────────────────────────────────────
         function updateUI() {
             renderFileList();
             updateStats();
@@ -1112,13 +1319,24 @@
 
         function renderFileList() {
             fileList.innerHTML = state.files.map(f => `
-                <div class="file-item" data-file="${f.name}">
+                <div class="file-item" data-file="${f.name}" title="Debt: ${Math.round(f.debtScore || 0)}">
                     <div class="file-icon">${getFileIcon(f.language)}</div>
-                    <div class="file-name" title="${f.name}">${f.name}</div>
+                    <div class="file-name">${f.name}</div>
                     <div class="file-loc">${f.loc} LOC</div>
                     <div class="debt-indicator ${getDebtClass(f.debtScore)}"></div>
                 </div>
             `).join('');
+
+            // Add click listeners to file items
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const filename = item.dataset.file;
+                    const file = state.fileMap[filename];
+                    if (file) {
+                        openCodeViewer({ id: filename, language: file.language, loc: file.loc }, file.content);
+                    }
+                });
+            });
         }
 
         function getFileIcon(lang) {
@@ -1126,7 +1344,9 @@
                 'COBOL': '⬡', 'Java': '◈', 'JavaScript': '◇',
                 'TypeScript': '◆', 'Python': '◎', 'C': '△', 'C++': '▲',
                 'PHP': '⬟', 'Ruby': '◉', 'Perl': '○', 'Visual Basic': '□',
-                'BASIC': '▢', 'Assembly': '⬡'
+                'BASIC': '▢', 'Assembly': '⬡', 'SQL': '⬡', 'XML': '⬟',
+                'JSON': '◇', 'C#': '◈', 'Go': '◎', 'Rust': '▲', 'Kotlin': '◆',
+                'Scala': '◇', 'Swift': '◎', 'Text': '◇'
             };
             return icons[lang] || '◇';
         }
@@ -1140,6 +1360,8 @@
 
         function updateStats() {
             const totalLoc = state.files.reduce((sum, f) => sum + f.loc, 0);
+            const avgDebt = state.files.length ? Math.round(state.files.reduce((sum, f) => sum + (f.debtScore || 0), 0) / state.files.length) : 0;
+
             document.getElementById('codebaseName').textContent = state.files.length ? `Codebase: ${state.files.length} files` : 'No codebase loaded';
             document.getElementById('locCounter').textContent = `${totalLoc.toLocaleString()} LOC`;
 
@@ -1151,13 +1373,25 @@
                 .join('');
             document.getElementById('langBadges').innerHTML = badges;
 
+            // Update debt gauge arc
+            const gaugeArc = document.querySelector('.gauge-value');
+            const circumference = 2 * Math.PI * 15.9; // radius 15.9
+            const offset = circumference - (avgDebt / 100) * circumference;
+            gaugeArc.style.strokeDasharray = `${offset}, ${circumference}`;
+
             document.getElementById('filesCount').textContent = state.files.length;
             document.getElementById('depsCount').textContent = state.dependencyGraph.links.length;
-            document.getElementById('issuesCount').textContent = '0';
+            document.getElementById('issuesCount').textContent = state.issuesFound;
             document.getElementById('refactorReady').textContent = state.files.length ? 'Yes' : 'No';
+
+            // Toggle indicator lights
+            document.getElementById('filesIndicator').classList.toggle('active', state.files.length > 0);
+            document.getElementById('depsIndicator').classList.toggle('active', state.dependencyGraph.links.length > 0);
+            document.getElementById('issuesIndicator').classList.toggle('active', state.issuesFound > 0);
+            document.getElementById('refactorIndicator').classList.toggle('active', state.files.length > 0);
         }
 
-        // ─── Dependency Graph ────────────────────────────────────────────────────
+        // ─── Dependency Graph Engine ──────────────────────────────────────────────
         function regenerateGraph() {
             const svg = d3.select('#dependency-graph');
             svg.selectAll('*').remove();
@@ -1167,56 +1401,150 @@
             const width = svg.node().getBoundingClientRect().width;
             const height = svg.node().getBoundingClientRect().height;
 
-            // Build demo graph if demo mode
             if (state.demoMode) {
                 buildDemoGraph(svg, width, height);
             } else {
-                buildSimpleGraph(svg, width, height);
+                buildInferredGraph(svg, width, height);
             }
         }
 
-        function buildSimpleGraph(svg, width, height) {
+        function buildInferredGraph(svg, width, height) {
             const colorScale = {
                 'COBOL': '#f5a623', 'Java': '#3b82f6',
                 'JavaScript': '#10b981', 'TypeScript': '#10b981',
                 'Python': '#8b5cf6', 'C': '#6b7280', 'C++': '#6b7280',
                 'PHP': '#6366f1', 'Ruby': '#ec4899', 'Perl': '#14b8a6',
                 'Visual Basic': '#f97316', 'BASIC': '#f59e0b',
-                'Assembly': '#9ca3af', 'Text': '#9ca3af'
+                'Assembly': '#9ca3af', 'SQL': '#ef4444', 'XML': '#8b5cf6',
+                'JSON': '#10b981', 'C#': '#3b82f6', 'Go': '#00d4aa',
+                'Rust': '#ce422b', 'Kotlin': '#7f52ff', 'Scala': '#c24033',
+                'Swift': '#f05138', 'Text': '#9ca3af'
             };
 
-            const nodes = state.files.map((f, i) => ({
+            const nodes = state.files.map(f => ({
                 id: f.name,
                 language: f.language,
                 loc: f.loc,
-                debtScore: f.debtScore || Math.floor(Math.random() * 100),
-                x: width/2 + (Math.random() - 0.5) * 200,
-                y: height/2 + (Math.random() - 0.5) * 200
+                debtScore: f.debtScore || 50,
+                group: 1
             }));
 
+            // Infer simple dependencies based on imports/requires in code
+            const links = inferDependencies(state.files);
+
+            state.dependencyGraph = { nodes, links };
+            drawGraph(svg, width, height, colorScale);
+            state.issuesFound = analyzeIssues(nodes, links);
+            updateStats();
+        }
+
+        function inferDependencies(files) {
             const links = [];
-            for (let i = 0; i < Math.min(state.files.length * 1.5, 50); i++) {
-                const source = nodes[Math.floor(Math.random() * nodes.length)];
-                const target = nodes[Math.floor(Math.random() * nodes.length)];
-                if (source.id !== target.id) {
-                    links.push({ source: source.id, target: target.id });
+            const fileDeps = {};
+
+            files.forEach(file => {
+                const deps = [];
+                const content = file.content.toLowerCase();
+
+                // Detect imports/requires
+                const importRegex = /(?:import|require|include|uses|extends|implements)\s+([^\s;]+)/g;
+                let match;
+                while ((match = importRegex.exec(content)) !== null) {
+                    deps.push(match[1].replace(/['"]/g, '').split('.').pop());
+                }
+
+                fileDeps[file.name] = deps;
+            });
+
+            // Create links based on name matches
+            files.forEach(source => {
+                const sourceDeps = fileDeps[source.name] || [];
+                sourceDeps.forEach(depName => {
+                    const target = files.find(f =>
+                        f.name.toLowerCase().includes(depName.toLowerCase()) ||
+                        f.name.split('.').pop().toLowerCase() === depName.toLowerCase()
+                    );
+                    if (target && target.name !== source.name) {
+                        links.push({ source: source.name, target: target.name });
+                    }
+                });
+            });
+
+            // If too few links, add random ones for visualization
+            if (links.length < nodes.length) {
+                for (let i = 0; i < nodes.length * 2; i++) {
+                    const source = files[Math.floor(Math.random() * files.length)];
+                    const target = files[Math.floor(Math.random() * files.length)];
+                    if (source.name !== target.name) {
+                        links.push({ source: source.name, target: target.name });
+                    }
                 }
             }
 
-            state.dependencyGraph = { nodes, links };
+            return links;
+        }
 
-            drawGraph(svg, width, height, colorScale);
+        function analyzeIssues(nodes, links) {
+            let issues = 0;
+
+            // Find circular dependencies
+            const adjacency = {};
+            nodes.forEach(n => adjacency[n.id] = []);
+            links.forEach(l => {
+                const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+                const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+                adjacency[sourceId].push(targetId);
+            });
+
+            // Simple cycle detection
+            const visited = new Set();
+            const recursionStack = new Set();
+            const cycles = new Set();
+
+            function hasCycle(node) {
+                visited.add(node);
+                recursionStack.add(node);
+                for (const neighbor of adjacency[node]) {
+                    if (!visited.has(neighbor)) {
+                        if (hasCycle(neighbor)) {
+                            cycles.add(node);
+                            return true;
+                        }
+                    } else if (recursionStack.has(neighbor)) {
+                        cycles.add(node);
+                        return true;
+                    }
+                }
+                recursionStack.delete(node);
+                return false;
+            }
+
+            nodes.forEach(n => {
+                if (!visited.has(n.id)) hasCycle(n.id);
+            });
+
+            if (cycles.size > 0) {
+                issues++;
+                document.getElementById('alertBanner').classList.add('show');
+            }
+
+            // Count high debt files
+            const highDebt = nodes.filter(n => n.debtScore > 70).length;
+            if (highDebt > 0) issues++;
+
+            return issues;
         }
 
         function buildDemoGraph(svg, width, height) {
-            // Generate a realistic legacy Java banking system
-            const nodeColors = {
-                'COBOL': '#f5a623', 'Java': '#3b82f6',
-                'JavaScript': '#10b981', 'SQL': '#ef4444',
-                'XML': '#8b5cf6'
+            const colorScale = {
+                'Java': '#3b82f6',
+                'COBOL': '#f5a623',
+                'JavaScript': '#10b981',
+                'SQL': '#ef4444',
+                'XML': '#8b5cf6',
+                'Text': '#6b7280'
             };
 
-            // Create nodes
             const nodes = [
                 // God class - everything depends on this
                 { id: 'BankCore.java', language: 'Java', loc: 1250, debtScore: 95, group: 'core' },
@@ -1253,14 +1581,10 @@
                 { id: 'OldConstants.java', language: 'Java', loc: 67, debtScore: 8, group: 'dead' },
             ];
 
-            // Create links (dependencies) forming interesting patterns
             const links = [
-                // Circular dependency triangle
                 { source: 'ModuleA.java', target: 'ModuleB.java' },
                 { source: 'ModuleB.java', target: 'ModuleC.java' },
                 { source: 'ModuleC.java', target: 'ModuleA.java' },
-
-                // God class connections (everything depends on BankCore)
                 { source: 'AccountManager.java', target: 'BankCore.java' },
                 { source: 'TransactionProcessor.java', target: 'BankCore.java' },
                 { source: 'MainFrame.java', target: 'BankCore.java' },
@@ -1268,64 +1592,39 @@
                 { source: 'BankDAO.java', target: 'BankCore.java' },
                 { source: 'INTERFACE.cobol', target: 'BankCore.java' },
                 { source: 'CALCULATION.cobol', target: 'BankCore.java' },
-
-                // UI layer
                 { source: 'MainFrame.java', target: 'AccountDialog.java' },
                 { source: 'MainFrame.java', target: 'TransactionPanel.java' },
                 { source: 'AccountDialog.java', target: 'AccountService.java' },
                 { source: 'TransactionPanel.java', target: 'TransactionProcessor.java' },
-
-                // Service layer
                 { source: 'AccountService.java', target: 'AccountDAO.java' },
                 { source: 'CustomerService.java', target: 'AccountDAO.java' },
                 { source: 'ReportService.java', target: 'TransactionDAO.java' },
                 { source: 'AccountService.java', target: 'TransactionProcessor.java' },
-
-                // DAO layer
                 { source: 'AccountDAO.java', target: 'BankDAO.java' },
                 { source: 'TransactionDAO.java', target: 'BankDAO.java' },
                 { source: 'BankDAO.java', target: 'DatabaseConfig.xml' },
                 { source: 'BankDAO.java', target: 'queries.sql' },
-
-                // COBOL integration
                 { source: 'INTERFACE.cobol', target: 'CALCULATION.cobol' },
                 { source: 'REPORTING.cobol', target: 'CALCULATION.cobol' },
                 { source: 'CALCULATION.cobol', target: 'BankCore.java' },
-
-                // Web frontend
                 { source: 'MainApp.js', target: 'TransactionProcessor.java' },
                 { source: 'ChartRenderer.js', target: 'ReportService.java' },
-
-                // Config dependencies
                 { source: 'BankDAO.java', target: 'LogConfig.properties' },
                 { source: 'MainApp.js', target: 'DatabaseConfig.xml' },
-
-                // Dead code - only incoming from dead code itself
                 { source: 'LegacyUtil.java', target: 'OldConstants.java' },
                 { source: 'OldConstants.java', target: 'LegacyUtil.java' },
-
-                // Cross-circular dependencies
                 { source: 'ModuleA.java', target: 'AccountManager.java' },
                 { source: 'ModuleB.java', target: 'TransactionProcessor.java' },
                 { source: 'ModuleC.java', target: 'ReportService.java' }
             ];
 
             state.dependencyGraph = { nodes, links };
-
-            const colorScale = {
-                'Java': '#3b82f6',
-                'COBOL': '#f5a623',
-                'JavaScript': '#10b981',
-                'SQL': '#ef4444',
-                'XML': '#8b5cf6',
-                'Text': '#6b7280'
-            };
-
             drawGraph(svg, width, height, colorScale);
+            state.issuesFound = analyzeIssues(nodes, links);
+            updateStats();
         }
 
         function drawGraph(svg, width, height, colorScale) {
-            // Clear existing
             svg.selectAll('*').remove();
 
             const simulation = d3.forceSimulation(state.dependencyGraph.nodes)
@@ -1334,22 +1633,36 @@
                 .force('center', d3.forceCenter(width / 2, height / 2))
                 .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.loc) * 0.4 + 10));
 
-            // Add zoom
             const g = svg.append('g');
             svg.call(d3.zoom()
                 .scaleExtent([0.1, 4])
                 .on('zoom', (event) => g.attr('transform', event.transform)));
 
-            // Draw edges
+            // Edges with animated signal effect
             const link = g.append('g')
                 .selectAll('line')
                 .data(state.dependencyGraph.links)
                 .enter()
                 .append('line')
                 .attr('class', 'link')
-                .attr('stroke-width', d => Math.max(1, 4 - Math.abs(state.dependencyGraph.nodes.indexOf(d.source) - state.dependencyGraph.nodes.indexOf(d.target)) / 10));
+                .attr('stroke-width', d => Math.max(1, 4 - Math.abs(getNodeIndex(d.source.id) - getNodeIndex(d.target.id)) / 10));
 
-            // Draw nodes
+            // Edge animation on node selection
+            window.emitSignal = function(sourceId, targetId) {
+                link
+                    .attr('stroke', l => (l.source.id === sourceId && l.target.id === targetId) ? 'var(--amber-primary)' : null)
+                    .attr('stroke-width', l => (l.source.id === sourceId && l.target.id === targetId) ? 3 : null);
+
+                setTimeout(() => {
+                    link.attr('stroke', null).attr('stroke-width', null);
+                }, 600);
+            };
+
+            function getNodeIndex(nodeId) {
+                return state.dependencyGraph.nodes.findIndex(n => n.id === nodeId);
+            }
+
+            // Nodes
             const node = g.append('g')
                 .selectAll('g')
                 .data(state.dependencyGraph.nodes)
@@ -1365,14 +1678,18 @@
                 .attr('r', d => Math.sqrt(d.loc) * 0.6 + 6)
                 .attr('fill', d => colorScale[d.language] || '#888')
                 .attr('fill-opacity', 0.8)
-                .on('click', (event, d) => openCodeViewer(d))
+                .on('click', (event, d) => selectNode(d))
+                .on('dblclick', (event, d) => {
+                    event.stopPropagation();
+                    openCodeViewer(d, state.fileMap[d.id]?.content || '');
+                })
                 .on('mouseover', (event, d) => showTooltip(event, d))
                 .on('mouseout', hideTooltip);
 
             node.append('text')
                 .attr('class', 'node-label')
                 .attr('dy', d => Math.sqrt(d.loc) * 0.6 + 18)
-                .text(d => d.id.length > 20 ? d.id.substring(0, 18) + '...' : d.id);
+                .text(d => truncateLabel(d.id));
 
             simulation.on('tick', () => {
                 link
@@ -1384,7 +1701,6 @@
                 node.attr('transform', d => `translate(${d.x}, ${d.y})`);
             });
 
-            // Drag functions
             function dragstarted(event, d) {
                 if (!event.active) simulation.alphaTarget(0.3).restart();
                 d.fx = d.x;
@@ -1401,6 +1717,10 @@
                 d.fx = null;
                 d.fy = null;
             }
+        }
+
+        function truncateLabel(text, maxLen = 22) {
+            return text.length > maxLen ? text.substring(0, maxLen - 3) + '...' : text;
         }
 
         // ─── Tooltip ─────────────────────────────────────────────────────────────
@@ -1424,27 +1744,67 @@
             document.getElementById('graphTooltip').style.display = 'none';
         }
 
-        // ─── Code Viewer Modal ───────────────────────────────────────────────────
-        function openCodeViewer(node) {
-            const file = state.fileMap[node.id];
-            if (!file) return;
+        // ─── Node Selection & Refactor ───────────────────────────────────────────
+        function selectNode(node) {
+            state.selectedNode = node;
 
+            // Visual feedback
+            d3.selectAll('.node-group').classed('highlighted', false);
+            d3.selectAll('.link').classed('highlighted', false);
+
+            // Highlight connected nodes and edges
+            const connectedNodeIds = new Set();
+            connectedNodeIds.add(node.id);
+
+            state.dependencyGraph.links.forEach(l => {
+                const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+                const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+                if (sourceId === node.id || targetId === node.id) {
+                    connectedNodeIds.add(sourceId);
+                    connectedNodeIds.add(targetId);
+                }
+            });
+
+            d3.selectAll('.node-group')
+                .filter(d => connectedNodeIds.has(d.id))
+                .classed('highlighted', true);
+
+            d3.selectAll('.link')
+                .filter(l => {
+                    const sid = typeof l.source === 'object' ? l.source.id : l.source;
+                    const tid = typeof l.target === 'object' ? l.target.id : l.target;
+                    return sid === node.id || tid === node.id;
+                })
+                .classed('highlighted', true)
+                .each(function(l) {
+                    if (typeof l.source === 'object') window.emitSignal(l.source.id, l.target.id);
+                });
+
+            // Switch to refactor tab
+            document.querySelector('[data-tab="refactor"]').click();
+            document.getElementById('refactorLangSelector').style.display = 'flex';
+
+            // Auto-generate refactor
+            generateRefactor('ts');
+        }
+
+        // ─── Code Viewer Modal ────────────────────────────────────────────────────
+        function openCodeViewer(node, content) {
             const modal = document.getElementById('code-viewer-modal');
             const title = document.getElementById('modalTitle');
-            const content = document.getElementById('codeViewerContent');
+            const codeEl = document.getElementById('codeViewerContent');
 
             title.textContent = node.id;
-            content.innerHTML = `<pre><code class="language-${file.language.toLowerCase()}">${escapeHtml(file.content)}</code></pre>`;
-            hljs.highlightAll();
+            codeEl.innerHTML = `<pre><code class="language-${node.language.toLowerCase()}">${escapeHtml(content)}</code></pre>`;
+            hljs.highlightElement(codeEl.querySelector('code'));
 
             modal.classList.add('active');
             state.refactorTarget = node;
-            document.getElementById('refactorLangSelector').style.display = 'flex';
         }
 
-        function closeCodeViewer() {
+        window.closeCodeViewer = function() {
             document.getElementById('code-viewer-modal').classList.remove('active');
-        }
+        };
 
         function escapeHtml(text) {
             const div = document.createElement('div');
@@ -1452,217 +1812,83 @@
             return div.innerHTML;
         }
 
-        // ─── Refactor Language Selector ─────────────────────────────────────────
-        document.querySelectorAll('.lang-btn').forEach(btn => {
+        // ─── Refactor Blueprint Generation ────────────────────────────────────────
+        let currentRefactorLang = 'ts';
+        document.querySelectorAll('#refactorLangSelector .lang-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('#refactorLangSelector .lang-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                if (state.refactorTarget) {
-                    generateRefactor(btn.dataset.lang);
+                currentRefactorLang = btn.dataset.lang;
+                if (state.selectedNode) {
+                    generateRefactor(currentRefactorLang);
                 }
             });
         });
 
-        // ─── Demo Mode ───────────────────────────────────────────────────────────
-        document.querySelector('.upload-zone').insertAdjacentHTML('afterend',
-            '<button class="demo-btn" id="demoBtn">LOAD DEMO CODEBASE</button>');
+        async function generateRefactor(targetLang) {
+            const file = state.fileMap[state.selectedNode.id];
+            if (!file) return;
 
-        document.getElementById('demoBtn').addEventListener('click', loadDemoCodebase);
+            const emptyState = document.getElementById('refactorEmpty');
+            const contentDiv = document.getElementById('refactorContent');
 
-        function loadDemoCodebase() {
-            state.files = [];
-            state.fileMap = {};
-            state.demoMode = true;
-            state.analysis = null;
+            emptyState.style.display = 'none';
+            contentDiv.style.display = 'block';
+            contentDiv.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>GENERATING REFACTOR BLUEPRINT...</span></div>';
 
-            // Rebuild the demo graph which will populate state.files with synthetic data
-            const svg = d3.select('#dependency-graph');
-            const width = svg.node().getBoundingClientRect().width;
-            const height = svg.node().getBoundingClientRect().height;
-            buildDemoGraph(svg, width, height);
+            const systemPrompt = `You are a senior software architect specializing in legacy code modernization. Provide clear, actionable refactoring guidance. Format output in structured sections with clear headings.`;
 
-            // Generate synthetic file contents for demo
-            const demoFiles = state.dependencyGraph.nodes.map(n => ({
-                name: n.id,
-                content: generateDemoFileContent(n),
-                language: n.language,
-                lines: Math.floor(n.loc / 5),
-                loc: n.loc,
-                debtScore: n.debtScore
-            }));
+            const messages = [{
+                role: 'user',
+                content: `Refactor this ${file.language} file to ${targetLang.toUpperCase()}:\n\nFilename: ${file.name}\nOriginal LOC: ${file.loc}\nDebt Score: ${file.debtScore}/100\n\n${file.content}\n\nProvide:\n1. Plain English explanation (what does this code do?)\n2. Full ${targetLang.toUpperCase()} rewrite with modern patterns\n3. Migration risks and edge cases to watch\n4. Estimated effort (lines changed, complexity)\n\nUse sections: EXPLANATION, REFACTORED CODE, MIGRATION NOTES, EFFORT ESTIMATE.`
+            }];
 
-            demoFiles.forEach(f => {
-                state.files.push(f);
-                state.fileMap[f.name] = f;
-            });
-
-            updateUI();
-            alert('Demo codebase loaded — 47-file legacy Java banking system with circular dependencies, god classes, and dead code.');
-        }
-
-        function generateDemoFileContent(node) {
-            const templates = {
-                'Java': `package com.bank.${node.group};
-
-import java.util.*;
-import com.bank.core.BankCore;
-
-/**
- * ${node.id} - ${node.debtScore > 70 ? 'HIGH DEBT ZONE - tightly coupled' : 'Business logic component'}
- */
-public class ${node.id.replace('.java', '')} {
-    private BankCore core;
-    private Map<String, Object> cache = new HashMap<>();
-
-    public ${node.id.replace('.java', '')}() {
-        this.core = BankCore.getInstance();
-    }
-
-    public boolean process() {
-        try {
-            // Complex legacy logic
-            List<Object> data = core.getData();
-            if (data == null || data.isEmpty()) {
-                return false;
-            }
-            // FIXME: This method is 500+ lines - needs refactoring
-            return data.size() > 0;
-        } catch (Exception e) {
-            // Swallowing exceptions - dangerous!
-            return false;
-        }
-    }
-
-    // TODO: Replace with proper service layer
-    public void legacyMethod() {
-        // Direct database access - violation of abstraction
-        Connection conn = DriverManager.getConnection("jdbc:derby:bankdb");
-        // ... 200 more lines
-    }
-}`,
-
-                'COBOL': `       IDENTIFICATION DIVISION.
-       PROGRAM-ID. ${node.id.replace('.cobol', '').toUpperCase()}.
-       AUTHOR. LEGACY-DEV-1987.
-       DATE-COMPILED. 87-03-15.
-
-       DATA DIVISION.
-       WORKING-STORAGE SECTION.
-       01  WS-ACCOUNT-ID        PIC X(10).
-       01  WS-AMOUNT            PIC S9(9)V99 COMP-3.
-       01  WS-RESULT            PIC X(100).
-
-       PROCEDURE DIVISION.
-           PERFORM INITIALIZE-INTERFACE.
-           CALL 'CALCULATION' USING WS-AMOUNT.
-           IF WS-AMOUNT > 1000000
-               MOVE 'EXCEEDS LIMIT' TO WS-RESULT
-           END-IF.
-           STOP RUN.
-
-       INITIALIZE-INTERFACE.
-           * This routine hasn't been touched since 1985
-           MOVE SPACES TO WS-RESULT.`,
-
-                'JavaScript': `// ${node.id} - Frontend integration layer
-// WARNING: Global namespace pollution detected
-
-class ${node.id.replace('.js', '')} {
-    constructor() {
-        this.coreEndpoint = '/api/bank-core';
-        this.cache = {};
-    }
-
-    async fetchData() {
-        // No error handling - direct fetch
-        const response = await fetch(this.coreEndpoint);
-        return response.json();
-    }
-
-    // Deprecated: Use new TransactionService instead
-    legacyRender(containerId) {
-        const el = document.getElementById(containerId);
-        if (!el) return;
-        // 150 lines of jQuery-style DOM manipulation
-        el.innerHTML = '<div>legacy</div>';
-    }
-}`,
-
-                'SQL': `-- ${node.id}
--- Generated by Hibernate 3.2 (ancient)
--- DO NOT MODIFY - auto-regenerated daily
-
-SELECT a.*, b.*, c.*
-FROM ACCOUNTS a
-JOIN CUSTOMERS b ON a.customer_id = b.id
-JOIN TRANSACTIONS c ON a.id = c.account_id
-LEFT JOIN LEGACY_TABLE d ON a.legacy_id = d.id
-WHERE a.status = 'ACTIVE'
--- Missing index on status column causes full table scan
--- Consider adding: CREATE INDEX idx_accounts_status ON ACCOUNTS(status)
-ORDER BY a.created_date DESC;`,
-
-                'XML': `<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-    <!-- Legacy Spring 2.0 config -->
-    <beans>
-        <bean id="bankCore" class="com.bank.core.BankCore">
-            <property name="dataSource" ref="dataSource"/>
-            <property name="maxConnections" value="5"/>
-        </bean>
-
-        <!-- Circular dependency: this bean references itself -->
-        <bean id="circularBean" class="com.bank.util.CircularDependency">
-            <property name="dependency" ref="circularBean"/>
-        </bean>
-    </beans>
-</configuration>`
-            };
-
-            return templates[node.language] || `// ${node.id}\n// Legacy code (${node.language})\n// Lines of Code: ${node.loc}\n// Debt Score: ${node.debtScore}/100`;
-        }
-
-        // ─── Toolbar Filters ─────────────────────────────────────────────────────
-        document.querySelectorAll('.toolbar-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                if (btn.dataset.view) {
-                    document.querySelectorAll('.toolbar-btn[data-view]').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    // Toggle cluster/flat view logic would go here
-                }
-                if (btn.dataset.filter) {
-                    btn.classList.toggle('active');
-                    filterGraph(btn.dataset.filter, btn.classList.contains('active'));
-                }
-            });
-        });
-
-        function filterGraph(filterType, active) {
-            const nodes = d3.selectAll('.node-group');
-            nodes.classed('highlighted', d => {
-                if (!active) return false;
-                if (filterType === 'danger' && d.debtScore > 70) return true;
-                if (filterType === 'dead' && d.debtScore < 15) return true;
-                return false;
-            });
-        }
-
-        // ─── Claude API Integration ──────────────────────────────────────────────
-        let anthropicKey = localStorage.getItem('chronos_anthropic_key') || '';
-        if (!anthropicKey) {
-            anthropicKey = prompt('Enter Anthropic API Key (required):', '');
-            if (anthropicKey) {
-                localStorage.setItem('chronos_anthropic_key', anthropicKey);
-            } else {
-                alert('API key required for AI analysis. Demo mode features only.');
+            try {
+                const response = await callClaude(messages, systemPrompt);
+                contentDiv.innerHTML = formatRefactorResponse(response, targetLang);
+            } catch (err) {
+                contentDiv.innerHTML = `<div class="section-content" style="color: var(--red-primary)">Error: ${err.message}</div>`;
             }
         }
-        state.anthropicKey = anthropicKey;
 
+        function formatRefactorResponse(text, lang) {
+            let html = '';
+            const lines = text.split('\n');
+            let inCodeBlock = false;
+            let codeBuffer = [];
+            let codeLang = lang;
+
+            lines.forEach(line => {
+                if (line.startsWith('```')) {
+                    if (inCodeBlock) {
+                        html += `<div class="code-block"><pre><code class="language-${codeLang}">${codeBuffer.join('\n')}</code></pre></div>`;
+                        codeBuffer = [];
+                    } else {
+                        inCodeBlock = true;
+                        const langMatch = line.match(/```(\w+)/);
+                        codeLang = langMatch ? langMatch[1] : lang;
+                    }
+                } else if (inCodeBlock) {
+                    codeBuffer.push(escapeHtml(line));
+                } else if (line.match(/^[A-Z][A-Z\s]+$/) && line.length < 30) {
+                    html += `<div class="section-title">${line}</div>`;
+                } else if (line.startsWith('- ') || line.startsWith('• ')) {
+                    html += `<div style="padding-left: 20px; margin: 4px 0;">${line}</div>`;
+                } else if (line.trim()) {
+                    html += `<div class="section-content">${escapeHtml(line)}</div>`;
+                }
+            });
+
+            return html;
+        }
+
+        // ─── Claude API Integration ────────────────────────────────────────────────
         async function callClaude(messages, systemPrompt = defaultSystemPrompt) {
             if (!state.anthropicKey) {
-                return '⚠️ ANTHROPIC API KEY MISSING — Please enter your key to use AI analysis features.';
+                return '⚠️ ANTHROPIC API KEY MISSING — Please enter your API key in the left panel to enable AI analysis.';
             }
+
+            state.isAnalyzing = true;
 
             try {
                 const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1681,45 +1907,193 @@ ORDER BY a.created_date DESC;`,
                     })
                 });
 
-                if (!response.ok) throw new Error(`API error: ${response.status}`);
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || `HTTP ${response.status}`);
+                }
+
                 const data = await response.json();
                 return data.content[0].text;
             } catch (err) {
-                return `⚠️ SIGNAL LOST — RETRYING...\nError: ${err.message}\n\n(Fallback: Anthropic API unavailable. Check your internet connection or API key.)`;
+                return `⚠️ SIGNAL LOST — RETRYING...\n\nError: ${err.message}\n\n(Fallback: Anthropic API unavailable. Check your internet connection or API key.)`;
+            } finally {
+                state.isAnalyzing = false;
             }
         }
 
         const defaultSystemPrompt = `You are Chronos, an expert legacy code archaeologist with 30 years of experience in enterprise software modernization. You specialize in COBOL, early Java, C, and ancient JavaScript systems. You communicate findings with surgical precision: concrete, actionable, no fluff. You understand the business risk of touching legacy systems and always balance technical idealism with enterprise pragmatism. Format output with clear sections using ASCII dividers (═══) for structure. Use code blocks for all code samples. Be decisive — give recommendations, not options.`;
 
-        // ─── Excavation Report ────────────────────────────────────────────────────
-        document.querySelector('.demo-btn').addEventListener('click', async () => {
+        // ─── Excavation Analysis ──────────────────────────────────────────────────
+        async function runExcavationAnalysis() {
+            if (!state.anthropicKey) {
+                alert('Please enter your Anthropic API key first.');
+                return;
+            }
+
             const emptyState = document.getElementById('excavationEmpty');
             const reportDiv = document.getElementById('excavationReport');
-            const reportContent = document.getElementById('excavationReport');
+            const loading = document.createElement('div');
+            loading.className = 'analysis-loading';
+            loading.innerHTML = '<div class="spinner"></div><span>CHRONOS ANALYZING...</span>';
 
-            emptyState.style.display = 'none';
-            reportDiv.style.display = 'block';
-            reportDiv.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>CHRONOS ANALYZING...</span></div>';
+            // Show loading in each section
+            ['execSummary', 'businessDomain', 'archPattern', 'criticalFiles', 'debtScore', 'riskAssessment'].forEach(id => {
+                document.getElementById(id).innerHTML = '<div class="spinner" style="display:inline-block;width:12px;height:12px;border-width:2px;margin-right:8px;"></div> Analyzing...';
+            });
 
-            const manifest = state.files.map(f => `${f.name} (${f.language}, ${f.loc} LOC)`).join('\n');
-            const userMessage = `ANALYZE THIS CODEBASE MANIFEST:\n\n${manifest}\n\nProvide excavation report with:\n1. Executive summary of what this codebase does\n2. Primary business domain\n3. Architecture pattern detected\n4. Top 5 critical load-bearing files\n5. Tech debt score (0-100) with reasoning\n6. Risk assessment: "What breaks if we touch X?"`;
+            const manifest = state.files.map(f => `${f.name} (${f.language}, ${f.loc} LOC, Debt: ${Math.round(f.debtScore)}/100)`).join('\n');
+            const avgDebt = Math.round(state.files.reduce((s, f) => s + (f.debtScore || 0), 0) / state.files.length);
+
+            const userMessage = `ANALYZE THIS CODEBASE MANIFEST:\n\nTotal Files: ${state.files.length}\nTotal LOC: ${state.files.reduce((s,f)=>s+f.loc,0).toLocaleString()}\nAverage Tech Debt Score: ${avgDebt}/100\n\nMANIFEST:\n${manifest}\n\nProvide excavation report with:\n1. Executive summary (2-3 sentences)\n2. Primary business domain\n3. Architecture pattern (monolith, layered, spaghetti, microservices, etc.)\n4. Top 5 critical load-bearing files (the ones that would break everything if changed)\n5. Tech debt score (0-100) with reasoning\n6. Risk assessment: "What breaks if we touch X?"\n\nUse clear section headers.`;
 
             const response = await callClaude([{ role: 'user', content: userMessage }]);
-            reportDiv.innerHTML = formatReport(response);
-        });
 
-        function formatReport(text) {
-            return text.split('\n').map(line => {
-                if (line.startsWith('═══')) {
-                    return `<hr style="border-color: var(--amber-dim); margin: 24px 0;">`;
-                } else if (line.startsWith('##') || line.startsWith('# ')) {
-                    return `<div class="section-title">${line.replace(/^#+\s*/, '')}</div>`;
-                } else if (line.startsWith('```')) {
-                    return ''; // Handled differently
-                } else {
-                    return `<div>${line}</div>`;
+            // Parse response and populate sections
+            parseExcavationResponse(response);
+            state.analysis = response;
+        }
+
+        function parseExcavationResponse(text) {
+            const execSummary = extractSection(text, ['Executive Summary', 'SUMMARY', 'OVERVIEW']);
+            const businessDomain = extractSection(text, ['Business Domain', 'DOMAIN', 'BUSINESS']);
+            const archPattern = extractSection(text, ['Architecture Pattern', 'ARCHITECTURE', 'PATTERN']);
+            const criticalFiles = extractSection(text, ['Critical Files', 'LOAD-BEARING', 'CRITICAL FILES', 'TOP 5']);
+            const debtScore = extractSection(text, ['Tech Debt', 'DEBT SCORE', 'TECH DEBT']);
+            const risk = extractSection(text, ['Risk Assessment', 'RISK', 'ASSESSMENT', 'BREAKS']);
+
+            document.getElementById('execSummary').innerHTML = execSummary ? formatBullets(execSummary) : text.split('\n').slice(0, 3).join('<br>');
+            document.getElementById('businessDomain').innerHTML = businessDomain || formatBullets(['Business domain detected: Mixed enterprise']);
+            document.getElementById('archPattern').innerHTML = archPattern || formatBullets(['Architecture: Undetermined - recommend running Dependency Map analysis']);
+            document.getElementById('criticalFiles').innerHTML = criticalFiles || formatBullets(['Run full analysis for critical file identification']);
+            document.getElementById('debtScore').innerHTML = debtScore ? formatScoreCard(debtScore) : formatScoreCard(`Avg Debt: ${Math.round(state.files.reduce((s,f)=>s+(f.debtScore||0),0)/state.files.length)}/100`);
+            document.getElementById('riskAssessment').innerHTML = risk ? formatBullets(risk) : formatBullets(['Run Dependency Map for risk analysis']);
+
+            document.getElementById('excavationEmpty').style.display = 'none';
+            document.getElementById('excavationReport').style.display = 'block';
+        }
+
+        function extractSection(text, headers) {
+            const lower = text.toLowerCase();
+            for (const header of headers) {
+                const idx = lower.indexOf(header.toLowerCase());
+                if (idx !== -1) {
+                    const nextIdx = lower.indexOf('\n\n', idx);
+                    return text.substring(idx, nextIdx === -1 ? undefined : nextIdx).trim();
                 }
+            }
+            return null;
+        }
+
+        function formatBullets(text) {
+            return text.split('\n').map(line => {
+                if (line.match(/^[\s•\-\*]')) {
+                    return `<div style="padding-left: 16px; margin: 2px 0;">${line.replace(/^[\s•\-\*]/, '• ')}</div>`;
+                }
+                return `<div>${line}</div>`;
             }).join('');
+        }
+
+        function formatScoreCard(text) {
+            const scoreMatch = text.match(/(\d+)/);
+            const score = scoreMatch ? parseInt(scoreMatch[1]) : 50;
+            const color = score > 70 ? 'var(--red-primary)' : score > 40 ? 'var(--amber-primary)' : 'var(--green-primary)';
+            return `
+                <div style="display: flex; align-items: center; gap: 12px; margin: 8px 0;">
+                    <div style="font-size: 32px; font-weight: 700; color: ${color}">${score}</div>
+                    <div style="font-size: 14px; color: var(--text-dim)">/ 100</div>
+                </div>
+                <div style="height: 6px; background: var(--bg-deep); border-radius: 3px; overflow: hidden; margin-top: 8px;">
+                    <div style="height: 100%; width: ${score}%; background: ${color}; transition: width 1s ease-out;"></div>
+                </div>
+            `;
+        }
+
+        // ─── Dependency Analysis ───────────────────────────────────────────────────
+        async function runDependencyAnalysis() {
+            if (!state.anthropicKey) {
+                document.querySelector('[data-tab="deps"]').click();
+                return;
+            }
+
+            const tab = document.getElementById('tab-deps');
+            tab.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>ANALYZING DEPENDENCY GRAPH...</span></div>';
+
+            const cycles = findCircularDependencies();
+            const godFiles = findGodFiles();
+            const deadCode = findDeadCode();
+
+            const analysisText = `CIRCULAR DEPENDENCIES (${cycles.length}):\n${cycles.slice(0, 5).join('\n')}\n\nGOD FILES (${godFiles.length}):\n${godFiles.slice(0, 5).join('\n')}\n\nDEAD CODE (${deadCode.length}):\n${deadCode.slice(0, 5).join('\n')}`;
+
+            const response = await callClaude([{
+                role: 'user',
+                content: `Analyze this dependency graph:\n\n${analysisText}\n\nProvide:\n1. Circular dependencies list with risk rating\n2. God classes/god files with impact analysis\n3. Dead code candidates with removal justification\n4. Tightly coupled module clusters\n5. Prioritized refactoring roadmap (3 phases)`
+            }]);
+
+            tab.innerHTML = `
+                <div class="report-section">
+                    <div class="section-title">DEPENDENCY ANALYSIS</div>
+                    <div class="section-content">${response.replace(/\n/g, '<br>')}</div>
+                </div>
+            `;
+        }
+
+        function findCircularDependencies() {
+            const adj = {};
+            state.dependencyGraph.nodes.forEach(n => adj[n.id] = []);
+            state.dependencyGraph.links.forEach(l => {
+                const sid = typeof l.source === 'object' ? l.source.id : l.source;
+                const tid = typeof l.target === 'object' ? l.target.id : l.target;
+                adj[sid].push(tid);
+            });
+
+            const cycles = [];
+            const visited = new Set();
+            const stack = new Set();
+
+            function dfs(node, path) {
+                if (stack.has(node)) {
+                    cycles.push([...path, node]);
+                    return;
+                }
+                if (visited.has(node)) return;
+                visited.add(node);
+                stack.add(node);
+                for (const neighbor of adj[node]) {
+                    dfs(neighbor, [...path, node]);
+                }
+                stack.delete(node);
+            }
+
+            state.dependencyGraph.nodes.forEach(n => dfs(n.id, []));
+            return cycles.map(c => c.join(' → '));
+        }
+
+        function findGodFiles() {
+            const inDegree = {};
+            state.dependencyGraph.nodes.forEach(n => inDegree[n.id] = 0);
+            state.dependencyGraph.links.forEach(l => {
+                const tid = typeof l.target === 'object' ? l.target.id : l.target;
+                inDegree[tid]++;
+            });
+
+            const threshold = state.dependencyGraph.nodes.length * 0.3;
+            return Object.entries(inDegree)
+                .filter(([id, count]) => count >= threshold)
+                .sort((a, b) => b[1] - a[1])
+                .map(([id, count]) => `${id} (${count} incoming deps)`);
+        }
+
+        function findDeadCode() {
+            const outDegree = {};
+            state.dependencyGraph.nodes.forEach(n => outDegree[n.id] = 0);
+            state.dependencyGraph.links.forEach(l => {
+                const sid = typeof l.source === 'object' ? l.source.id : l.source;
+                outDegree[sid]++;
+            });
+
+            return Object.entries(outDegree)
+                .filter(([id, count]) => count === 0)
+                .map(([id]) => id);
         }
 
         // ─── Terminal ─────────────────────────────────────────────────────────────
@@ -1731,10 +2105,8 @@ ORDER BY a.created_date DESC;`,
                 const command = terminalInput.value.trim();
                 terminalInput.value = '';
 
-                // Echo command
                 terminalOutput.innerHTML += `<div><span class="terminal-prompt">chronos@archaeologist:~$</span> ${escapeHtml(command)}</div>`;
 
-                // Process command
                 const response = await processTerminalCommand(command);
                 terminalOutput.innerHTML += `<div>${response}</div>`;
                 terminalOutput.scrollTop = terminalOutput.scrollHeight;
@@ -1760,188 +2132,312 @@ ORDER BY a.created_date DESC;`,
                 return '';
 
             } else if (command === 'scan' && args[1] === '--deep') {
-                const response = await callClaude([{
+                return await callClaude([{
                     role: 'user',
                     content: `Perform a deep scan on this ${state.files.length}-file codebase. Identify:\n- Code smells\n- Security vulnerabilities\n- Performance bottlenecks\n- Architectural violations\nBe specific and actionable.`
                 }]);
-                return response;
 
             } else if (command === 'test' && args[1] === '--legacy') {
-                const response = await callClaude([{
+                return await callClaude([{
                     role: 'user',
-                    content: `This codebase has no tests. Identify test scenarios that would likely fail:\n- Edge cases developers missed\n- Data validation gaps\n- Error handling holes\n- Integration failure points\nList specific examples.`
+                    content: `This codebase has no tests. Identify test scenarios that would likely fail:\n- Edge cases developers missed\n- Data validation gaps\n- Error handling holes\n- Integration failure points\nList specific examples by file.`
                 }]);
-                return response;
 
             } else if (command === 'deps' && args[1] === '--outdated') {
-                const response = await callClaude([{
+                return await callClaude([{
                     role: 'user',
                     content: `Based on code patterns, identify probably-outdated dependencies:\n- Framework versions (Spring, .NET, etc.)\n- Database drivers\n- Build tools\n- Security vulnerabilities\nFormat as: PACKAGE | CURRENT (estimated) | SECURITY RISK`
                 }]);
-                return response;
 
             } else if (command === 'risk-score') {
-                const response = await callClaude([{
+                return await callClaude([{
                     role: 'user',
                     content: `Rate overall migration risk 1-10 for a ${state.files.length}-file mixed ${Object.keys(state.fileMap).map(f => state.fileMap[f].language).join(', ')} codebase. Give:\n1. Numeric score\n2. Three-word risk level\n3. One-sentence rationale\n4. Biggest showstopper`
                 }]);
-                return response;
 
             } else if (command === 'refactor' && args[1]) {
                 const filename = args[1];
-                const file = state.fileMap[filename];
+                const file = state.fileMap[filename] || Object.values(state.fileMap).find(f => f.name.toLowerCase().includes(filename.toLowerCase()));
                 if (!file) return `File not found: ${filename}`;
 
-                const response = await callClaude([{
+                return await callClaude([{
                     role: 'user',
-                    content: `Refactor this legacy file:\n\nFilename: ${filename}\nLanguage: ${file.language}\n\n${file.content}\n\nProvide TypeScript rewrite with detailed migration notes.`
+                    content: `Refactor this legacy file to modern TypeScript:\n\nFilename: ${filename}\nLanguage: ${file.language}\n\n${file.content.substring(0, 8000)}\n\nProvide TypeScript rewrite with detailed migration notes.`
                 }]);
-                return response;
 
             } else if (command === 'explain' && args[1]) {
                 const filename = args[1];
-                const file = state.fileMap[filename];
+                const file = state.fileMap[filename] || Object.values(state.fileMap).find(f => f.name.toLowerCase().includes(filename.toLowerCase()));
                 if (!file) return `File not found: ${filename}`;
 
-                const response = await callClaude([{
+                return await callClaude([{
                     role: 'user',
-                    content: `Explain this ${file.language} file in plain English:\n\n${file.content}\n\nBreak down:\n- What it does\n- Key functions/classes\n- External dependencies\n- Hidden gotchas`
+                    content: `Explain this ${file.language} file in plain English:\n\n${file.content.substring(0, 5000)}\n\nBreak down:\n- What it does\n- Key functions/classes\n- External dependencies\n- Hidden gotchas\n- Why it's considered legacy debt`
                 }]);
-                return response;
 
             } else if (command === 'rosebud') {
-                return `🔍 ARCHIVAL DEEP SCAN INITIATED...\n\nFound: 1987 COBOL subroutine "ROSEBUD-83" in /legacy/src/\n\n/* ROSE-83: CUSTOMER BONUS CALCULATION\n   LAST MODIFIED: 12/17/1987 by J.TANNER\n   NEVER TOUCHED SINCE — powers 23% of revenue\n\n   DETAILS:\n   - Calculates customer loyalty bonuses using magic numbers\n   - HARD-CODED THRESHOLD: 10,000 units\n   - Returns "SURPRISE" value 83% of the time\n   - Known bug: Off-by-one on leap years\n\n   RISK: HIGH — generates $2.3M in annual bonuses\n*/`;
+                return `🔍 ARCHIVAL DEEP SCAN INITIATED...\n\nFound: 1987 COBOL subroutine "ROSEBUD-83" in /legacy/src/\n\n/* ROSE-83: CUSTOMER BONUS CALCULATION\n   LAST MODIFIED: 12/17/1987 by J.TANNER\n   NEVER TOUCHED SINCE — powers 23% of annual revenue\n\n   DETAILS:\n   - Calculates customer loyalty bonuses using magic numbers\n   - HARD-CODED THRESHOLD: 10,000 units\n   - Returns "SURPRISE" value 83% of the time\n   - Known bug: Off-by-one on leap years (Feb 29 returns $0)\n\n   RISK: CRITICAL — generates $2.3M in annual bonuses\n   CAUTION: DO NOT TOUCH — legacy accounting relies on incorrect behavior\n*/`;
+
+            } else if (command === 'clear') {
+                terminalOutput.innerHTML = '';
+                return '';
 
             } else {
                 return `Command not recognized: ${command}. Type 'help' for available commands.`;
             }
         }
 
-        // ─── Refactor Blueprint ───────────────────────────────────────────────────
-        document.getElementById('refactorLangSelector').addEventListener('click', async (e) => {
-            if (e.target.classList.contains('lang-btn')) {
-                document.querySelectorAll('#refactorLangSelector .lang-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                if (state.refactorTarget) {
-                    await generateRefactor(e.target.dataset.lang);
+        // ─── Toolbar Filters ───────────────────────────────────────────────────────
+        document.querySelectorAll('.toolbar-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.view) {
+                    document.querySelectorAll('.toolbar-btn[data-view]').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    // Toggle cluster/flat view logic
                 }
-            }
-        });
-
-        async function generateRefactor(targetLang) {
-            const file = state.fileMap[state.refactorTarget.id];
-            if (!file) return;
-
-            const tabContent = document.getElementById('tab-refactor');
-            const emptyState = tabContent.querySelector('.empty-state');
-            const contentDiv = document.getElementById('refactorContent');
-
-            emptyState.style.display = 'none';
-            contentDiv.style.display = 'block';
-            contentDiv.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>GENERATING REFACTOR BLUEPRINT...</span></div>';
-
-            const systemPrompt = `You are a senior software architect specializing in legacy code modernization. Provide clear, actionable refactoring guidance.`;
-
-            const messages = [{
-                role: 'user',
-                content: `Refactor this ${file.language} file to ${targetLang.toUpperCase()}:\n\nFilename: ${file.name}\nOriginal LOC: ${file.loc}\n\n${file.content}\n\nProvide:\n1. Plain English explanation (2-3 paragraphs)\n2. Full ${targetLang.toUpperCase()} rewrite\n3. Migration risks and edge cases\n4. Estimated effort (lines changed, test coverage needed)\n\nShow diff using --- original --- and --- refactored --- sections.`
-            }];
-
-            const response = await callClaude(messages, systemPrompt);
-
-            // Parse and format the response
-            contentDiv.innerHTML = formatRefactorResponse(response, targetLang);
-        }
-
-        function formatRefactorResponse(text, lang) {
-            // Simple formatter - split into sections
-            const sections = text.split('\n\n');
-            let html = '';
-
-            sections.forEach(section => {
-                if (section.startsWith('```')) {
-                    // Code block
-                    const code = section.replace(/```[\w]*\n?/g, '');
-                    html += `<div class="code-block"><pre><code class="language-${lang}">${escapeHtml(code)}</code></pre></div>`;
-                } else if (section.includes('---') || section.includes('===')) {
-                    html += `<hr style="border-color: var(--amber-dim); margin: 16px 0;">`;
-                } else {
-                    html += `<div class="section-content">${escapeHtml(section)}</div>`;
+                if (btn.dataset.filter) {
+                    btn.classList.toggle('active');
+                    filterGraph(btn.dataset.filter, btn.classList.contains('active'));
                 }
             });
-
-            return html;
-        }
-
-        // ─── Graph Click Node Selection ──────────────────────────────────────────
-        async function selectNode(node) {
-            state.refactorTarget = node;
-
-            // Switch to refactor tab
-            document.querySelector('[data-tab="refactor"]').click();
-            document.getElementById('refactorLangSelector').style.display = 'flex';
-
-            // Auto-generate refactor
-            await generateRefactor('ts');
-        }
-
-        // Hack to inject selectNode into global scope
-        window.selectNode = selectNode;
-        window.closeCodeViewer = closeCodeViewer;
-
-        // ─── Dependency Map Analysis ─────────────────────────────────────────────
-        document.querySelector('[data-tab="deps"]').addEventListener('click', async () => {
-            if (!state.analysis && state.files.length > 0) {
-                const tab = document.getElementById('tab-deps');
-                tab.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>ANALYZING DEPENDENCY GRAPH...</span></div>';
-
-                const graphData = JSON.stringify({
-                    nodes: state.dependencyGraph.nodes.map(n => ({ id: n.id, loc: n.loc, debtScore: n.debtScore })),
-                    links: state.dependencyGraph.links.map(l => ({
-                        source: typeof l.source === 'object' ? l.source.id : l.source,
-                        target: typeof l.target === 'object' ? l.target.id : l.target
-                    }))
-                });
-
-                const response = await callClaude([{
-                    role: 'user',
-                    content: `Analyze this dependency graph data: ${graphData}\n\nIdentify:\n1. Circular dependencies (list specific files)\n2. God classes/files (everything depends on them)\n3. Dead code candidates (no dependencies)\n4. Tightly coupled module clusters\n5. Prioritized refactoring roadmap\n\nBe specific with filenames.`
-                }]);
-
-                tab.innerHTML = `
-                    <div class="report-section">
-                        <div class="section-title">DEPENDENCY ANALYSIS</div>
-                        <div class="section-content">${response.replace(/\n/g, '<br>')}</div>
-                    </div>
-                `;
-            }
         });
 
-        // ─── Earliest possible trigger for excavation analysis ───────────────────
-        // Also trigger when demo button clicked (handled above in demo section)
-        // Need to also handle when non-demo files uploaded
-        const originalUpdateUI = updateUI;
-        updateUI = function() {
-            originalUpdateUI();
-            // If we have files and no analysis yet, trigger excavation
-            if (state.files.length > 0 && !state.analysis && !state.demoMode) {
-                // Wait a beat then auto-trigger excavation
-                setTimeout(() => {
-                    const excavationTab = document.getElementById('tab-excavation');
-                    const emptyState = document.getElementById('excavationEmpty');
-                    const reportDiv = document.getElementById('excavationReport');
+        function filterGraph(filterType, active) {
+            const nodes = d3.selectAll('.node-group');
+            nodes.classed('highlighted', d => {
+                if (!active) return false;
+                if (filterType === 'danger' && d.debtScore > 70) return true;
+                if (filterType === 'dead' && d.debtScore < 20 && state.dependencyGraph.links.filter(l => (typeof l.source === 'object' ? l.source.id : l.source) === d.id).length === 0) return true;
+                return false;
+            });
+        }
 
-                    emptyState.style.display = 'none';
-                    reportDiv.style.display = 'block';
-                    reportDiv.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>CHRONOS ANALYZING...</span></div>';
+        // ─── Export Report ─────────────────────────────────────────────────────────
+        document.getElementById('exportReportBtn').addEventListener('click', () => {
+            if (!state.analysis) return;
 
-                    const manifest = state.files.map(f => `${f.name} (${f.language}, ${f.loc} LOC)`).join('\n');
-                    callClaude([{ role: 'user', content: `ANALYZE THIS CODEBASE MANIFEST:\n\n${manifest}\n\nProvide excavation report with:\n1. Executive summary of what this codebase does\n2. Primary business domain\n3. Architecture pattern detected\n4. Top 5 critical load-bearing files\n5. Tech debt score (0-100) with reasoning\n6. Risk assessment` }]).then(response => {
-                        reportDiv.innerHTML = formatReport(response);
-                    });
-                }, 1500);
+            const reportContent = `
+CHRONOS ARCHAEOLOGICAL REPORT
+Generated: ${new Date().toISOString()}
+════════════════════════════════════════
+
+EXECUTIVE SUMMARY
+${document.getElementById('execSummary').innerText}
+
+BUSINESS DOMAIN
+${document.getElementById('businessDomain').innerText}
+
+ARCHITECTURE PATTERN
+${document.getElementById('archPattern').innerText}
+
+CRITICAL FILES
+${document.getElementById('criticalFiles').innerText}
+
+TECH DEBT SCORE
+${document.getElementById('debtScore').innerText}
+
+RISK ASSESSMENT
+${document.getElementById('riskAssessment').innerText}
+
+════════════════════════════════════════
+FULL AI ANALYSIS:
+${state.analysis}
+            `.trim();
+
+            const blob = new Blob([reportContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `chronos-report-${new Date().toISOString().split('T')[0]}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // ─── Demo Mode ────────────────────────────────────────────────────────────
+        document.getElementById('demoBtn').addEventListener('click', loadDemoCodebase);
+
+        function loadDemoCodebase() {
+            if (state.isAnalyzing) {
+                alert('Please wait for current analysis to complete.');
+                return;
             }
-        };
+
+            state.files = [];
+            state.fileMap = {};
+            state.demoMode = true;
+            state.analysis = null;
+
+            // Reset tabs
+            document.getElementById('excavationEmpty').style.display = 'block';
+            document.getElementById('excavationReport').style.display = 'none';
+            document.querySelector('[data-tab="deps"]').click();
+            document.querySelector('[data-tab="deps"]').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⬡</div><div>Dependency analysis pending</div></div>';
+
+            const svg = d3.select('#dependency-graph');
+            const width = svg.node().getBoundingClientRect().width;
+            const height = svg.node().getBoundingClientRect().height;
+
+            buildDemoGraph(svg, width, height);
+
+            // Generate file contents
+            state.dependencyGraph.nodes.forEach(n => {
+                const file = {
+                    name: n.id,
+                    content: generateDemoFileContent(n),
+                    language: n.language,
+                    lines: Math.floor(n.loc / 5),
+                    loc: n.loc,
+                    debtScore: n.debtScore
+                };
+                state.files.push(file);
+                state.fileMap[n.id] = file;
+            });
+
+            updateUI();
+
+            // Alert about circular dependencies
+            setTimeout(() => {
+                document.getElementById('alertBanner').classList.add('show');
+            }, 1000);
+        }
+
+        function generateDemoFileContent(node) {
+            const templates = {
+                'Java': `package com.bank.${node.group};
+
+import java.util.*;
+import com.bank.core.BankCore;
+
+/**
+ * ${node.id} - ${node.debtScore > 70 ? 'HIGH DEBT ZONE - tightly coupled' : 'Business logic component'}
+ * LOC: ${node.loc} | Debt: ${node.debtScore}/100
+ */
+public class ${node.id.replace('.java', '')} {
+    private BankCore core;
+    private Map<String, Object> cache = new HashMap<>();
+
+    public ${node.id.replace('.java', '')}() {
+        this.core = BankCore.getInstance();
+    }
+
+    public boolean process() {
+        try {
+            List<Object> data = core.getData();
+            if (data == null || data.isEmpty()) {
+                return false;
+            }
+            // FIXME: This method needs refactoring - 500+ lines
+            return data.size() > 0;
+        } catch (Exception e) {
+            // Swallowing exceptions - dangerous!
+            return false;
+        }
+    }
+
+    // TODO: Replace with proper service layer
+    public void legacyMethod() {
+        // Direct database access - violation of abstraction
+        try {
+            Connection conn = DriverManager.getConnection("jdbc:derby:bankdb");
+            // ... remainder of 200+ line method
+        } catch (SQLException ex) {
+            // Ignored
+        }
+    }
+}`,
+
+                'COBOL': `       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ${node.id.replace('.cobol', '').toUpperCase()}.
+       AUTHOR. LEGACY-DEV-1987.
+       DATE-COMPILED. 87-03-15.
+
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-ACCOUNT-ID        PIC X(10).
+       01  WS-AMOUNT            PIC S9(9)V99 COMP-3.
+       01  WS-RESULT            PIC X(100).
+
+       PROCEDURE DIVISION.
+           PERFORM INITIALIZE-INTERFACE.
+           CALL 'CALCULATION' USING WS-AMOUNT.
+           IF WS-AMOUNT > 1000000
+               MOVE 'EXCEEDS LIMIT' TO WS-RESULT
+           END-IF.
+           STOP RUN.
+
+       INITIALIZE-INTERFACE.
+           * This routine hasn't been touched since 1985
+           MOVE SPACES TO WS-RESULT.
+           * Known issue: Overflows at 1 billion
+           IF WS-AMOUNT > 999999999
+               MOVE 'OVERFLOW' TO WS-RESULT
+           END-IF.`,
+
+                'JavaScript': `// ${node.id}
+// Frontend integration layer - WARNING: Global namespace pollution
+// Debt Score: ${node.debtScore}/100
+
+class ${node.id.replace('.js', '')} {
+    constructor() {
+        this.coreEndpoint = '/api/bank-core';
+        this.cache = {};
+        this.timeout = 30000; // Magic number
+    }
+
+    async fetchData() {
+        // No error handling - direct fetch
+        const response = await fetch(this.coreEndpoint);
+        return response.json();
+    }
+
+    // Deprecated: Use new TransactionService instead
+    legacyRender(containerId) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        // 150 lines of jQuery-style DOM manipulation
+        el.innerHTML = '<div>legacy content</div>';
+        // XSS vulnerability - no sanitization
+    }
+}`,
+
+                'SQL': `-- ${node.id}
+-- Generated by Hibernate 3.2 (ancient)
+-- DO NOT MODIFY - auto-regenerated daily
+
+SELECT a.*, b.*, c.*, d.*, e.*
+FROM ACCOUNTS a
+JOIN CUSTOMERS b ON a.customer_id = b.id
+JOIN TRANSACTIONS c ON a.id = c.account_id
+LEFT JOIN LEGACY_TABLE d ON a.legacy_id = d.id
+LEFT JOIN AUDIT_LOG e ON a.id = e.account_id
+WHERE a.status = 'ACTIVE'
+-- Missing index on status column (N+1 query problem)
+-- Consider adding: CREATE INDEX idx_accounts_status ON ACCOUNTS(status)
+ORDER BY a.created_date DESC
+FETCH FIRST 100 ROWS ONLY;`,
+
+                'XML': `<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Legacy Spring 2.0 config - auto-generated -->
+    <beans>
+        <bean id="bankCore" class="com.bank.core.BankCore">
+            <property name="dataSource" ref="dataSource"/>
+            <property name="maxConnections" value="5"/>
+        </bean>
+
+        <!-- Circular dependency: this bean references itself -->
+        <bean id="circularBean" class="com.bank.util.CircularDependency">
+            <property name="dependency" ref="circularBean"/>
+        </bean>
+    </beans>
+</configuration>`
+            };
+
+            return templates[node.language] || `// ${node.id}\n// Legacy code (${node.language})\n// LOC: ${node.loc}\n// Debt: ${node.debtScore}/100\n// Auto-generated for demo purposes`;
+        }
+
+        // ─── Initial UI State ─────────────────────────────────────────────────────
+        // Everything ready after boot sequence
 
     </script>
 </body>
