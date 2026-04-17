@@ -1,0 +1,392 @@
+// Database schema for Project Chronos SaaS
+// Run: npx prisma db push
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts        Account[]
+  sessions        Session[]
+  organizations   OrganizationMember[]
+  repositories    Repository[]
+  scans           Scan[]
+  aiJobs          AIJob[]
+  comments        Comment[]
+  assignments     Assignment[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  logoUrl     String?
+  website     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members OrganizationMember[]
+  invites OrganizationInvite[]
+  repositories Repository[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String         @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole @default(MEMBER)
+  createdAt      DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@map("organization_members")
+}
+
+model OrganizationInvite {
+  id             String   @id @default(cuid())
+  organizationId String
+  email          String
+  role           OrganizationRole @default(MEMBER)
+  token          String   @unique
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  acceptedAt     DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_invites")
+}
+
+model Repository {
+  id               String          @id @default(cuid())
+  organizationId   String
+  name             String
+  description      String?
+  slug             String
+  gitUrl           String?
+  gitProvider      GitProvider?
+  gitRepoId        String?
+  branch           String          @default("main")
+  status           RepositoryStatus @default(PENDING)
+  visibility       Visibility      @default(PRIVATE)
+  primaryLanguage  String?
+  totalFiles       Int             @default(0)
+  totalLines       Int             @default(0)
+  techDebtScore    Float?
+  securityScore    Float?
+  complexityScore  Float?
+  modernizationScore Float?
+  lastScanAt       DateTime?
+  scannedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  files        RepositoryFile[]
+  scans        Scan[]
+  aiJobs       AIJob[]
+  comments     Comment[]
+  assignments  Assignment[]
+
+  @@unique([organizationId, slug])
+  @@map("repositories")
+}
+
+model RepositoryFile {
+  id            String   @id @default(cuid())
+  repositoryId  String
+  path          String
+  name          String
+  language      String?
+  size          Int?
+  lines         Int?
+  content       String?  @db.Text
+  debtScore     Float?
+  complexity    String?
+  dependencies  Json?
+  analyzedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, path])
+  @@map("repository_files")
+}
+
+model Scan {
+  id              String         @id @default(cuid())
+  repositoryId    String
+  userId          String?
+  type            ScanType
+  status          ScanStatus     @default(PENDING)
+  triggeredBy     String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  error           String?        @db.Text
+  statistics      Json?
+  results         Json?          @db.Text
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user      User?      @relation(fields: [userId], references: [id])
+
+  @@map("scans")
+}
+
+model AIJob {
+  id           String     @id @default(cuid())
+  repositoryId String
+  scanId       String?
+  type         AIJobType
+  status       AIJobStatus @default(PENDING)
+  userId       String?
+  prompt       String?    @db.Text
+  response     String?    @db.Text
+  tokensUsed   Int?
+  cost         Float?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  error        String?    @db.Text
+  metadata     Json?
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  scan       Scan?      @relation(fields: [scanId], references: [id])
+
+  @@map("ai_jobs")
+}
+
+model Comment {
+  id          String   @id @default(cuid())
+  repositoryId String
+  filePath    String?
+  lineNumber  Int?
+  content     String
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@map("comments")
+}
+
+model Assignment {
+  id          String   @id @default(cuid())
+  repositoryId String
+  filePath    String?
+  type        AssignmentType
+  priority    Priority  @default(MEDIUM)
+  status      AssignmentStatus @default(OPEN)
+  title       String
+  description String?  @db.Text
+  userId      String   // Assigned to
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@map("assignments")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  resource  String
+  resourceId String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model Plan {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  priceMonthly Float?
+  priceYearly Float?
+  stripePriceId String?
+  features    Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@map("plans")
+}
+
+model Subscription {
+  id               String             @id @default(cuid())
+  userId           String
+  planId           String
+  stripeCustomerId String?            @unique
+  stripeSubscriptionId String?        @unique
+  status           SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean          @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+  plan Plan @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+// Enums stored as strings
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum GitProvider {
+  GITHUB
+  GITLAB
+  BITBUCKET
+  AZURE_DEVOPS
+}
+
+enum RepositoryStatus {
+  PENDING
+  SCANNING
+  COMPLETED
+  FAILED
+  ARCHIVED
+}
+
+enum Visibility {
+  PRIVATE
+  INTERNAL
+  PUBLIC
+}
+
+enum ScanType {
+  QUICK
+  DEEP
+  SECURITY
+  ARCHITECTURE
+  DEPENDENCIES
+  FULL
+}
+
+enum ScanStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AIJobType {
+  EXCAVATION_REPORT
+  DEPENDENCY_ANALYSIS
+  REFACTOR
+  CODE_EXPLANATION
+  SECURITY_SCAN
+  PERFORMANCE_REVIEW
+}
+
+enum AIJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AssignmentType {
+  BUG
+  FEATURE
+  DEBT
+  REFACTOR
+  SECURITY
+  PERFORMANCE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AssignmentStatus {
+  OPEN
+  IN_PROGRESS
+  REVIEW
+  DONE
+  CANCELLED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  UNPAID
+}
