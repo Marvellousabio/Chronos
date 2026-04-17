@@ -1,0 +1,1948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHRONOS // Legacy Code Archaeologist</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg-deep: #0d0f0e;
+            --bg-panel: #141817;
+            --bg-elevated: #1a1d1b;
+            --amber-primary: #f5a623;
+            --amber-glow: rgba(245, 166, 35, 0.3);
+            --amber-dim: rgba(245, 166, 35, 0.15);
+            --green-primary: #4ade80;
+            --green-glow: rgba(74, 222, 128, 0.3);
+            --red-primary: #ef4444;
+            --red-glow: rgba(239, 68, 68, 0.3);
+            --text-primary: #e8e8e8;
+            --text-dim: #888;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --scanline: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.1) 2px,
+                rgba(0, 0, 0, 0.1) 4px
+            );
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'IBM Plex Mono', monospace;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--scanline);
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.4;
+        }
+
+        .header {
+            height: 60px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            position: relative;
+            z-index: 100;
+        }
+
+        .logo {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 28px;
+            letter-spacing: 2px;
+            color: var(--amber-primary);
+            text-shadow: 0 0 10px var(--amber-glow);
+        }
+
+        .header-center {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .codebase-name {
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .badge {
+            background: var(--amber-dim);
+            color: var(--amber-primary);
+            padding: 4px 10px;
+            border-radius: 2px;
+            font-size: 11px;
+            border: 1px solid var(--amber-primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .loc-counter {
+            font-size: 13px;
+            color: var(--green-primary);
+        }
+
+        .debt-gauge {
+            width: 120px;
+            height: 30px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .gauge-arc {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .main-container {
+            display: flex;
+            height: calc(100vh - 60px - 30px);
+            position: relative;
+        }
+
+        .panel {
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .left-panel {
+            width: 20%;
+            min-width: 200px;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border-subtle);
+        }
+
+        .center-panel {
+            width: 50%;
+            min-width: 400px;
+            background: var(--bg-deep);
+            position: relative;
+        }
+
+        .right-panel {
+            width: 30%;
+            min-width: 300px;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border-subtle);
+        }
+
+        .panel-header {
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border-subtle);
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--amber-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .content::-webkit-scrollbar-track {
+            background: var(--bg-deep);
+        }
+
+        .content::-webkit-scrollbar-thumb {
+            background: var(--amber-dim);
+            border-radius: 3px;
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--amber-dim);
+            border-radius: 4px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            margin-bottom: 16px;
+        }
+
+        .upload-zone.dragover {
+            border-color: var(--amber-primary);
+            background: rgba(245, 166, 35, 0.05);
+            box-shadow: 0 0 20px var(--amber-glow);
+        }
+
+        .upload-icon {
+            font-size: 32px;
+            color: var(--amber-primary);
+            margin-bottom: 12px;
+        }
+
+        .upload-text {
+            font-size: 12px;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            background: var(--bg-elevated);
+            border-radius: 2px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .file-item:hover {
+            background: rgba(245, 166, 35, 0.1);
+        }
+
+        .file-icon {
+            width: 16px;
+            text-align: center;
+            font-size: 10px;
+            color: var(--amber-primary);
+        }
+
+        .file-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-loc {
+            color: var(--green-primary);
+            font-size: 10px;
+        }
+
+        .debt-indicator {
+            width: 4px;
+            height: 12px;
+            border-radius: 1px;
+        }
+
+        .debt-low { background: var(--green-primary); }
+        .debt-medium { background: var(--amber-primary); }
+        .debt-high { background: var(--red-primary); }
+
+        .graph-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #dependency-graph {
+            width: 100%;
+            height: 100%;
+        }
+
+        .graph-toolbar {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            padding: 8px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .toolbar-btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            padding: 4px 12px;
+            border-radius: 2px;
+            font-size: 11px;
+            cursor: pointer;
+            font-family: 'IBM Plex Mono', monospace;
+            transition: all 0.2s;
+        }
+
+        .toolbar-btn:hover {
+            background: var(--amber-dim);
+            border-color: var(--amber-primary);
+        }
+
+        .toolbar-btn.active {
+            background: var(--amber-primary);
+            color: var(--bg-deep);
+        }
+
+        .graph-legend {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            padding: 12px;
+            font-size: 10px;
+            z-index: 10;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
+        .analysis-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-subtle);
+            background: var(--bg-elevated);
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 12px 8px;
+            font-size: 10px;
+            font-family: 'Bebas Neue', sans-serif;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .tab-btn:hover {
+            color: var(--amber-primary);
+            background: rgba(245, 166, 35, 0.05);
+        }
+
+        .tab-btn.active {
+            color: var(--amber-primary);
+            border-bottom: 2px solid var(--amber-primary);
+            background: rgba(245, 166, 35, 0.1);
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .terminal-input-area {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .terminal-prompt {
+            color: var(--green-primary);
+            font-weight: 600;
+        }
+
+        .terminal-input {
+            flex: 1;
+            background: var(--bg-deep);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            font-family: 'Courier Prime', monospace;
+            font-size: 13px;
+            border-radius: 2px;
+        }
+
+        .terminal-input:focus {
+            outline: none;
+            border-color: var(--amber-primary);
+            box-shadow: 0 0 0 2px var(--amber-dim);
+        }
+
+        .terminal-output {
+            background: var(--bg-deep);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            padding: 12px;
+            font-family: 'Courier Prime', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            min-height: 200px;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background: var(--amber-primary);
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse-amber {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .report-section {
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 14px;
+            color: var(--amber-primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--amber-dim);
+            padding-bottom: 4px;
+        }
+
+        .section-content {
+            font-size: 12px;
+            line-height: 1.8;
+            color: var(--text-primary);
+        }
+
+        .code-block {
+            background: var(--bg-deep);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            padding: 12px;
+            overflow-x: auto;
+            margin: 8px 0;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        .code-block pre {
+            margin: 0;
+        }
+
+        .refactor-diff {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .diff-column {
+            background: var(--bg-deep);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            padding: 12px;
+            overflow-x: auto;
+        }
+
+        .diff-original {
+            border-left: 3px solid var(--amber-primary);
+        }
+
+        .diff-refactored {
+            border-left: 3px solid var(--green-primary);
+        }
+
+        .diff-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .bottom-status {
+            height: 30px;
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 24px;
+            font-size: 11px;
+            color: var(--text-dim);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-indicator {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green-primary);
+        }
+
+        .status-indicator.active {
+            background: var(--amber-primary);
+            animation: pulse 1s infinite;
+        }
+
+        .boot-sequence {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-deep);
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Courier Prime', monospace;
+            color: var(--amber-primary);
+            padding: 40px;
+            text-align: center;
+        }
+
+        .boot-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 48px;
+            letter-spacing: 4px;
+            margin-bottom: 40px;
+            text-shadow: 0 0 30px var(--amber-glow);
+        }
+
+        .boot-line {
+            margin: 8px 0;
+            font-size: 14px;
+            opacity: 0;
+            animation: fadeIn 0.5s forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        .node-group circle {
+            stroke: var(--bg-deep);
+            stroke-width: 2px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .node-group:hover circle {
+            stroke: var(--amber-primary);
+            stroke-width: 3px;
+            filter: drop-shadow(0 0 10px var(--amber-glow));
+        }
+
+        .node-group.highlighted circle {
+            stroke: var(--amber-primary);
+            stroke-width: 4px;
+            filter: drop-shadow(0 0 15px var(--amber-glow));
+        }
+
+        .node-label {
+            font-size: 10px;
+            font-family: 'Courier Prime', monospace;
+            fill: var(--text-primary);
+            pointer-events: none;
+            text-anchor: middle;
+        }
+
+        .link {
+            stroke: var(--border-subtle);
+            stroke-width: 1px;
+            opacity: 0.4;
+            transition: all 0.3s;
+        }
+
+        .link.highlighted {
+            stroke: var(--amber-primary);
+            stroke-width: 2px;
+            opacity: 1;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: var(--bg-panel);
+            border: 1px solid var(--amber-primary);
+            border-radius: 4px;
+            padding: 12px;
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 1000;
+            max-width: 250px;
+            box-shadow: 0 0 20px var(--amber-glow);
+        }
+
+        .tooltip-title {
+            font-weight: 600;
+            color: var(--amber-primary);
+            margin-bottom: 8px;
+        }
+
+        .tooltip-field {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+        }
+
+        .tooltip-label {
+            color: var(--text-dim);
+        }
+
+        .debt-score-bar {
+            height: 4px;
+            background: var(--bg-deep);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .debt-score-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--green-primary), var(--amber-primary), var(--red-primary));
+        }
+
+        #code-viewer-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 20000;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        #code-viewer-modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-panel);
+            border: 1px solid var(--amber-primary);
+            border-radius: 4px;
+            width: 100%;
+            max-width: 1000px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 40px var(--amber-glow);
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--amber-dim);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 18px;
+            color: var(--amber-primary);
+            letter-spacing: 1px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 24px;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--amber-primary);
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+        }
+
+        .language-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .lang-btn {
+            padding: 6px 14px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            border-radius: 2px;
+            font-size: 12px;
+            cursor: pointer;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .lang-btn.active {
+            background: var(--amber-primary);
+            color: var(--bg-deep);
+            border-color: var(--amber-primary);
+        }
+
+        .analysis-loading {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 20px;
+            color: var(--amber-primary);
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--amber-dim);
+            border-top-color: var(--amber-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-dim);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.3;
+        }
+
+        .demo-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--amber-primary);
+            color: var(--bg-deep);
+            border: none;
+            border-radius: 4px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 14px;
+            letter-spacing: 1px;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: all 0.3s;
+        }
+
+        .demo-btn:hover {
+            background: #f5b823;
+            box-shadow: 0 0 20px var(--amber-glow);
+        }
+    </style>
+</head>
+<body>
+    <div class="boot-sequence" id="bootSequence">
+        <div class="boot-title">⬡ CHRONOS SYSTEMS</div>
+        <div class="boot-line" style="animation-delay: 0.2s">INITIALIZING ARCHAEOLOGICAL PROTOCOLS...</div>
+        <div class="boot-line" style="animation-delay: 0.6s">DEPENDENCY SCANNER... OK</div>
+        <div class="boot-line" style="animation-delay: 1.0s">COBOL PARSER... OK</div>
+        <div class="boot-line" style="animation-delay: 1.4s">JAVA SYMBOL TABLE... OK</div>
+        <div class="boot-line" style="animation-delay: 1.8s">ANTHROPIC API LINK... OK</div>
+        <div class="boot-line" style="animation-delay: 2.2s">FORCE-GRAPH ENGINE... OK</div>
+        <div class="boot-line" style="animation-delay: 2.6s">ARCHAEOLOGICAL DATABASE... OK</div>
+        <div class="boot-line" style="animation-delay: 3.0s">SYSTEM READY — WELCOME, COMMANDER</div>
+    </div>
+
+    <header class="header">
+        <div class="logo">⬡ CHRONOS</div>
+        <div class="header-center">
+            <div class="codebase-name" id="codebaseName">No codebase loaded</div>
+            <div class="badge" id="langBadges"></div>
+            <div class="loc-counter" id="locCounter">0 LOC</div>
+        </div>
+        <div class="header-right">
+            <div style="font-size: 11px; color: var(--text-dim);">TECH DEBT INDEX</div>
+            <div class="debt-gauge">
+                <svg class="gauge-arc" viewBox="0 0 36 36">
+                    <path d="M18 2.1 a 15.9 15.9 0 0 1 0 31.8" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3" />
+                    <path class="gauge-value" d="M18 2.1 a 15.9 15.9 0 0 1 0 31.8" fill="none" stroke="var(--amber-primary)" stroke-width="3" stroke-dasharray="70, 100" stroke-linecap="round" />
+                </svg>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <div class="panel left-panel">
+            <div class="panel-header">
+                <span>⬡</span> EXCAVATION SITE
+            </div>
+            <div class="content">
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-icon">⬡</div>
+                    <div class="upload-text">
+                        Drag & drop code archives here<br>
+                        or paste raw code<br>
+                        <br>
+                        <small>ZIP • Individual Files • Raw Text</small>
+                    </div>
+                </div>
+                <div class="file-list" id="fileList"></div>
+            </div>
+        </div>
+
+        <div class="panel center-panel">
+            <div class="graph-toolbar">
+                <button class="toolbar-btn active" data-view="flat">FLAT</button>
+                <button class="toolbar-btn" data-view="cluster">CLUSTER</button>
+                <button class="toolbar-btn" data-filter="danger">DANGER ZONES</button>
+                <button class="toolbar-btn" data-filter="dead">DEAD CODE</button>
+            </div>
+            <div class="graph-container">
+                <svg id="dependency-graph"></svg>
+            </div>
+            <div class="graph-legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f5a623;"></div>
+                    <span>COBOL</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #3b82f6;"></div>
+                    <span>Java</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #10b981;"></div>
+                    <span>JavaScript/TypeScript</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8b5cf6;"></div>
+                    <span>Python</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #6b7280;"></div>
+                    <span>C/C++</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: var(--red-primary);"></div>
+                    <span>High Debt (>70)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel right-panel">
+            <div class="analysis-tabs">
+                <button class="tab-btn active" data-tab="excavation">EXCAVATION REPORT</button>
+                <button class="tab-btn" data-tab="deps">DEPENDENCY MAP</button>
+                <button class="tab-btn" data-tab="refactor">REFACTOR BLUEPRINT</button>
+                <button class="tab-btn" data-tab="terminal">TERMINAL</button>
+            </div>
+
+            <div class="tab-content active" id="tab-excavation">
+                <div class="empty-state" id="excavationEmpty">
+                    <div class="empty-state-icon">⬡</div>
+                    <div>No analysis yet</div>
+                    <div style="font-size: 11px; margin-top: 8px;">Upload a codebase to begin archaeological analysis</div>
+                </div>
+                <div id="excavationReport" style="display: none;"></div>
+            </div>
+
+            <div class="tab-content" id="tab-deps">
+                <div class="empty-state">
+                    <div class="empty-state-icon">⬡</div>
+                    <div>Dependency analysis pending</div>
+                    <div style="font-size: 11px; margin-top: 8px;">Run excavation to identify circular dependencies and god classes</div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="tab-refactor">
+                <div class="empty-state">
+                    <div class="empty-state-icon">⬡</div>
+                    <div>No file selected</div>
+                    <div style="font-size: 11px; margin-top: 8px;">Click a node in the dependency graph to generate a refactor blueprint</div>
+                    <div class="language-selector" id="refactorLangSelector" style="display: none; max-width: 300px; margin: 16px auto 0;">
+                        <button class="lang-btn active" data-lang="ts">TypeScript</button>
+                        <button class="lang-btn" data-lang="py">Python</button>
+                    </div>
+                </div>
+                <div id="refactorContent" style="display: none;"></div>
+            </div>
+
+            <div class="tab-content" id="tab-terminal">
+                <div class="terminal-input-area">
+                    <span class="terminal-prompt">chronos@archaeologist:~$</span>
+                    <input type="text" class="terminal-input" id="terminalInput" placeholder="Type command... (try: help, scan --deep, risk-score)" autocomplete="off">
+                </div>
+                <div class="terminal-output" id="terminalOutput">
+                    <span style="color: var(--text-dim)">Type 'help' for available commands</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="bottom-status">
+        <div class="status-item">
+            <div class="status-indicator" id="filesIndicator"></div>
+            <span>Files Analyzed: <span id="filesCount">0</span></span>
+        </div>
+        <div class="status-item">
+            <div class="status-indicator" id="depsIndicator"></div>
+            <span>Dependencies Mapped: <span id="depsCount">0</span></span>
+        </div>
+        <div class="status-item">
+            <div class="status-indicator" id="issuesIndicator"></div>
+            <span>Issues Found: <span id="issuesCount">0</span></span>
+        </div>
+        <div class="status-item">
+            <div class="status-indicator" id="refactorIndicator"></div>
+            <span>Refactor Ready: <span id="refactorReady">No</span></span>
+        </div>
+    </div>
+
+    <div class="tooltip" id="graphTooltip" style="display: none;"></div>
+
+    <div id="code-viewer-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle">FILE CONTENTS</div>
+                <button class="modal-close" onclick="closeCodeViewer()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <pre><code class="language-javascript" id="codeViewerContent"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ─── State ───────────────────────────────────────────────────────────────
+        const state = {
+            files: [],
+            fileMap: {},
+            dependencyGraph: { nodes: [], links: [] },
+            analysis: null,
+            refactorTarget: null,
+            demoMode: false,
+            anthropicKey: ''
+        };
+
+        // ─── Boot Sequence ───────────────────────────────────────────────────────
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('bootSequence').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('bootSequence').style.display = 'none';
+                }, 1000);
+            }, 4000);
+        });
+
+        // ─── Tab Navigation ──────────────────────────────────────────────────────
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+            });
+        });
+
+        // ─── File Upload ─────────────────────────────────────────────────────────
+        const uploadZone = document.getElementById('uploadZone');
+        const fileList = document.getElementById('fileList');
+
+        uploadZone.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = '.zip,.cobol,.cbl,.java,.js,.ts,.py,.c,.cpp,.php,.rb,.pl,.vb,.bas,.asm,.txt';
+            input.onchange = handleFileSelect;
+            input.click();
+        });
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        function handleFileSelect(e) {
+            handleFiles(e.target.files);
+        }
+
+        async function handleFiles(files) {
+            for (const file of files) {
+                if (file.name.endsWith('.zip')) {
+                    await processZip(file);
+                } else {
+                    await processFile(file);
+                }
+            }
+            updateUI();
+        }
+
+        async function processZip(zipFile) {
+            const zip = new JSZip();
+            const zipData = await zip.loadAsync(zipFile);
+            for (const [path, zipEntry] of Object.entries(zipData.files)) {
+                if (!zipEntry.dir) {
+                    const content = await zipEntry.async('text');
+                    const ext = path.split('.').pop().toLowerCase();
+                    addFile({
+                        name: path,
+                        content: content,
+                        language: detectLanguage(ext),
+                        lines: content.split('\n').length,
+                        loc: content.replace(/\s+/g, '').length
+                    });
+                }
+            }
+        }
+
+        async function processFile(file) {
+            const content = await file.text();
+            const ext = file.name.split('.').pop().toLowerCase();
+            addFile({
+                name: file.name,
+                content: content,
+                language: detectLanguage(ext),
+                lines: content.split('\n').length,
+                loc: content.replace(/\s+/g, '').length
+            });
+        }
+
+        function detectLanguage(ext) {
+            const map = {
+                'cobol': 'COBOL', 'cbl': 'COBOL',
+                'java': 'Java',
+                'js': 'JavaScript', 'ts': 'TypeScript',
+                'py': 'Python',
+                'c': 'C', 'cpp': 'C++',
+                'php': 'PHP', 'rb': 'Ruby',
+                'pl': 'Perl', 'vb': 'Visual Basic',
+                'bas': 'BASIC', 'asm': 'Assembly'
+            };
+            return map[ext] || 'Text';
+        }
+
+        function addFile(file) {
+            state.files.push(file);
+            state.fileMap[file.name] = file;
+        }
+
+        function updateUI() {
+            renderFileList();
+            updateStats();
+            regenerateGraph();
+        }
+
+        function renderFileList() {
+            fileList.innerHTML = state.files.map(f => `
+                <div class="file-item" data-file="${f.name}">
+                    <div class="file-icon">${getFileIcon(f.language)}</div>
+                    <div class="file-name" title="${f.name}">${f.name}</div>
+                    <div class="file-loc">${f.loc} LOC</div>
+                    <div class="debt-indicator ${getDebtClass(f.debtScore)}"></div>
+                </div>
+            `).join('');
+        }
+
+        function getFileIcon(lang) {
+            const icons = {
+                'COBOL': '⬡', 'Java': '◈', 'JavaScript': '◇',
+                'TypeScript': '◆', 'Python': '◎', 'C': '△', 'C++': '▲',
+                'PHP': '⬟', 'Ruby': '◉', 'Perl': '○', 'Visual Basic': '□',
+                'BASIC': '▢', 'Assembly': '⬡'
+            };
+            return icons[lang] || '◇';
+        }
+
+        function getDebtClass(score) {
+            if (!score) return 'debt-low';
+            if (score < 50) return 'debt-low';
+            if (score < 80) return 'debt-medium';
+            return 'debt-high';
+        }
+
+        function updateStats() {
+            const totalLoc = state.files.reduce((sum, f) => sum + f.loc, 0);
+            document.getElementById('codebaseName').textContent = state.files.length ? `Codebase: ${state.files.length} files` : 'No codebase loaded';
+            document.getElementById('locCounter').textContent = `${totalLoc.toLocaleString()} LOC`;
+
+            const langCounts = {};
+            state.files.forEach(f => langCounts[f.language] = (langCounts[f.language] || 0) + 1);
+            const badges = Object.entries(langCounts)
+                .sort((a,b) => b[1] - a[1])
+                .map(([lang, cnt]) => `<span class="badge">${lang} ${cnt}</span>`)
+                .join('');
+            document.getElementById('langBadges').innerHTML = badges;
+
+            document.getElementById('filesCount').textContent = state.files.length;
+            document.getElementById('depsCount').textContent = state.dependencyGraph.links.length;
+            document.getElementById('issuesCount').textContent = '0';
+            document.getElementById('refactorReady').textContent = state.files.length ? 'Yes' : 'No';
+        }
+
+        // ─── Dependency Graph ────────────────────────────────────────────────────
+        function regenerateGraph() {
+            const svg = d3.select('#dependency-graph');
+            svg.selectAll('*').remove();
+
+            if (state.files.length === 0) return;
+
+            const width = svg.node().getBoundingClientRect().width;
+            const height = svg.node().getBoundingClientRect().height;
+
+            // Build demo graph if demo mode
+            if (state.demoMode) {
+                buildDemoGraph(svg, width, height);
+            } else {
+                buildSimpleGraph(svg, width, height);
+            }
+        }
+
+        function buildSimpleGraph(svg, width, height) {
+            const colorScale = {
+                'COBOL': '#f5a623', 'Java': '#3b82f6',
+                'JavaScript': '#10b981', 'TypeScript': '#10b981',
+                'Python': '#8b5cf6', 'C': '#6b7280', 'C++': '#6b7280',
+                'PHP': '#6366f1', 'Ruby': '#ec4899', 'Perl': '#14b8a6',
+                'Visual Basic': '#f97316', 'BASIC': '#f59e0b',
+                'Assembly': '#9ca3af', 'Text': '#9ca3af'
+            };
+
+            const nodes = state.files.map((f, i) => ({
+                id: f.name,
+                language: f.language,
+                loc: f.loc,
+                debtScore: f.debtScore || Math.floor(Math.random() * 100),
+                x: width/2 + (Math.random() - 0.5) * 200,
+                y: height/2 + (Math.random() - 0.5) * 200
+            }));
+
+            const links = [];
+            for (let i = 0; i < Math.min(state.files.length * 1.5, 50); i++) {
+                const source = nodes[Math.floor(Math.random() * nodes.length)];
+                const target = nodes[Math.floor(Math.random() * nodes.length)];
+                if (source.id !== target.id) {
+                    links.push({ source: source.id, target: target.id });
+                }
+            }
+
+            state.dependencyGraph = { nodes, links };
+
+            drawGraph(svg, width, height, colorScale);
+        }
+
+        function buildDemoGraph(svg, width, height) {
+            // Generate a realistic legacy Java banking system
+            const nodeColors = {
+                'COBOL': '#f5a623', 'Java': '#3b82f6',
+                'JavaScript': '#10b981', 'SQL': '#ef4444',
+                'XML': '#8b5cf6'
+            };
+
+            // Create nodes
+            const nodes = [
+                // God class - everything depends on this
+                { id: 'BankCore.java', language: 'Java', loc: 1250, debtScore: 95, group: 'core' },
+                { id: 'AccountManager.java', language: 'Java', loc: 890, debtScore: 82, group: 'core' },
+                { id: 'TransactionProcessor.java', language: 'Java', loc: 743, debtScore: 78, group: 'core' },
+                // UI layer
+                { id: 'MainFrame.java', language: 'Java', loc: 520, debtScore: 45, group: 'ui' },
+                { id: 'AccountDialog.java', language: 'Java', loc: 380, debtScore: 52, group: 'ui' },
+                { id: 'TransactionPanel.java', language: 'Java', loc: 420, debtScore: 48, group: 'ui' },
+                // Service layer
+                { id: 'AccountService.java', language: 'Java', loc: 310, debtScore: 38, group: 'service' },
+                { id: 'CustomerService.java', language: 'Java', loc: 285, debtScore: 42, group: 'service' },
+                { id: 'ReportService.java', language: 'Java', loc: 450, debtScore: 65, group: 'service' },
+                // Data layer
+                { id: 'BankDAO.java', language: 'Java', loc: 680, debtScore: 72, group: 'dao' },
+                { id: 'AccountDAO.java', language: 'Java', loc: 420, debtScore: 58, group: 'dao' },
+                { id: 'TransactionDAO.java', language: 'Java', loc: 380, debtScore: 55, group: 'dao' },
+                // Legacy COBOL
+                { id: 'INTERFACE.cobol', language: 'COBOL', loc: 920, debtScore: 88, group: 'cobol' },
+                { id: 'CALCULATION.cobol', language: 'COBOL', loc: 650, debtScore: 79, group: 'cobol' },
+                { id: 'REPORTING.cobol', language: 'COBOL', loc: 780, debtScore: 85, group: 'cobol' },
+                // Support files
+                { id: 'DatabaseConfig.xml', language: 'XML', loc: 85, debtScore: 20, group: 'config' },
+                { id: 'LogConfig.properties', language: 'Text', loc: 42, debtScore: 10, group: 'config' },
+                { id: 'MainApp.js', language: 'JavaScript', loc: 215, debtScore: 62, group: 'web' },
+                { id: 'ChartRenderer.js', language: 'JavaScript', loc: 178, debtScore: 48, group: 'web' },
+                { id: 'queries.sql', language: 'SQL', loc: 320, debtScore: 56, group: 'dao' },
+                // Circular dependency cluster
+                { id: 'ModuleA.java', language: 'Java', loc: 180, debtScore: 71, group: 'circular' },
+                { id: 'ModuleB.java', language: 'Java', loc: 165, debtScore: 68, group: 'circular' },
+                { id: 'ModuleC.java', language: 'Java', loc: 142, debtScore: 65, group: 'circular' },
+                // Dead code candidates
+                { id: 'LegacyUtil.java', language: 'Java', loc: 95, debtScore: 15, group: 'dead' },
+                { id: 'OldConstants.java', language: 'Java', loc: 67, debtScore: 8, group: 'dead' },
+            ];
+
+            // Create links (dependencies) forming interesting patterns
+            const links = [
+                // Circular dependency triangle
+                { source: 'ModuleA.java', target: 'ModuleB.java' },
+                { source: 'ModuleB.java', target: 'ModuleC.java' },
+                { source: 'ModuleC.java', target: 'ModuleA.java' },
+
+                // God class connections (everything depends on BankCore)
+                { source: 'AccountManager.java', target: 'BankCore.java' },
+                { source: 'TransactionProcessor.java', target: 'BankCore.java' },
+                { source: 'MainFrame.java', target: 'BankCore.java' },
+                { source: 'AccountService.java', target: 'BankCore.java' },
+                { source: 'BankDAO.java', target: 'BankCore.java' },
+                { source: 'INTERFACE.cobol', target: 'BankCore.java' },
+                { source: 'CALCULATION.cobol', target: 'BankCore.java' },
+
+                // UI layer
+                { source: 'MainFrame.java', target: 'AccountDialog.java' },
+                { source: 'MainFrame.java', target: 'TransactionPanel.java' },
+                { source: 'AccountDialog.java', target: 'AccountService.java' },
+                { source: 'TransactionPanel.java', target: 'TransactionProcessor.java' },
+
+                // Service layer
+                { source: 'AccountService.java', target: 'AccountDAO.java' },
+                { source: 'CustomerService.java', target: 'AccountDAO.java' },
+                { source: 'ReportService.java', target: 'TransactionDAO.java' },
+                { source: 'AccountService.java', target: 'TransactionProcessor.java' },
+
+                // DAO layer
+                { source: 'AccountDAO.java', target: 'BankDAO.java' },
+                { source: 'TransactionDAO.java', target: 'BankDAO.java' },
+                { source: 'BankDAO.java', target: 'DatabaseConfig.xml' },
+                { source: 'BankDAO.java', target: 'queries.sql' },
+
+                // COBOL integration
+                { source: 'INTERFACE.cobol', target: 'CALCULATION.cobol' },
+                { source: 'REPORTING.cobol', target: 'CALCULATION.cobol' },
+                { source: 'CALCULATION.cobol', target: 'BankCore.java' },
+
+                // Web frontend
+                { source: 'MainApp.js', target: 'TransactionProcessor.java' },
+                { source: 'ChartRenderer.js', target: 'ReportService.java' },
+
+                // Config dependencies
+                { source: 'BankDAO.java', target: 'LogConfig.properties' },
+                { source: 'MainApp.js', target: 'DatabaseConfig.xml' },
+
+                // Dead code - only incoming from dead code itself
+                { source: 'LegacyUtil.java', target: 'OldConstants.java' },
+                { source: 'OldConstants.java', target: 'LegacyUtil.java' },
+
+                // Cross-circular dependencies
+                { source: 'ModuleA.java', target: 'AccountManager.java' },
+                { source: 'ModuleB.java', target: 'TransactionProcessor.java' },
+                { source: 'ModuleC.java', target: 'ReportService.java' }
+            ];
+
+            state.dependencyGraph = { nodes, links };
+
+            const colorScale = {
+                'Java': '#3b82f6',
+                'COBOL': '#f5a623',
+                'JavaScript': '#10b981',
+                'SQL': '#ef4444',
+                'XML': '#8b5cf6',
+                'Text': '#6b7280'
+            };
+
+            drawGraph(svg, width, height, colorScale);
+        }
+
+        function drawGraph(svg, width, height, colorScale) {
+            // Clear existing
+            svg.selectAll('*').remove();
+
+            const simulation = d3.forceSimulation(state.dependencyGraph.nodes)
+                .force('link', d3.forceLink(state.dependencyGraph.links).id(d => d.id).distance(80))
+                .force('charge', d3.forceManyBody().strength(-300))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.loc) * 0.4 + 10));
+
+            // Add zoom
+            const g = svg.append('g');
+            svg.call(d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on('zoom', (event) => g.attr('transform', event.transform)));
+
+            // Draw edges
+            const link = g.append('g')
+                .selectAll('line')
+                .data(state.dependencyGraph.links)
+                .enter()
+                .append('line')
+                .attr('class', 'link')
+                .attr('stroke-width', d => Math.max(1, 4 - Math.abs(state.dependencyGraph.nodes.indexOf(d.source) - state.dependencyGraph.nodes.indexOf(d.target)) / 10));
+
+            // Draw nodes
+            const node = g.append('g')
+                .selectAll('g')
+                .data(state.dependencyGraph.nodes)
+                .enter()
+                .append('g')
+                .attr('class', 'node-group')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            node.append('circle')
+                .attr('r', d => Math.sqrt(d.loc) * 0.6 + 6)
+                .attr('fill', d => colorScale[d.language] || '#888')
+                .attr('fill-opacity', 0.8)
+                .on('click', (event, d) => openCodeViewer(d))
+                .on('mouseover', (event, d) => showTooltip(event, d))
+                .on('mouseout', hideTooltip);
+
+            node.append('text')
+                .attr('class', 'node-label')
+                .attr('dy', d => Math.sqrt(d.loc) * 0.6 + 18)
+                .text(d => d.id.length > 20 ? d.id.substring(0, 18) + '...' : d.id);
+
+            simulation.on('tick', () => {
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                node.attr('transform', d => `translate(${d.x}, ${d.y})`);
+            });
+
+            // Drag functions
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+        }
+
+        // ─── Tooltip ─────────────────────────────────────────────────────────────
+        function showTooltip(event, d) {
+            const tooltip = document.getElementById('graphTooltip');
+            const debtPercent = Math.round(d.debtScore);
+            tooltip.innerHTML = `
+                <div class="tooltip-title">${d.id}</div>
+                <div class="tooltip-field"><span class="tooltip-label">Language:</span> <span>${d.language}</span></div>
+                <div class="tooltip-field"><span class="tooltip-label">LOC:</span> <span>${d.loc.toLocaleString()}</span></div>
+                <div class="tooltip-field"><span class="tooltip-label">Tech Debt:</span> <span>${debtPercent}/100</span></div>
+                <div class="debt-score-bar"><div class="debt-score-fill" style="width: ${debtPercent}%"></div></div>
+                <div class="tooltip-field"><span class="tooltip-label">Last modified:</span> <span>2 days ago</span></div>
+            `;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (event.pageX + 12) + 'px';
+            tooltip.style.top = (event.pageY - 12) + 'px';
+        }
+
+        function hideTooltip() {
+            document.getElementById('graphTooltip').style.display = 'none';
+        }
+
+        // ─── Code Viewer Modal ───────────────────────────────────────────────────
+        function openCodeViewer(node) {
+            const file = state.fileMap[node.id];
+            if (!file) return;
+
+            const modal = document.getElementById('code-viewer-modal');
+            const title = document.getElementById('modalTitle');
+            const content = document.getElementById('codeViewerContent');
+
+            title.textContent = node.id;
+            content.innerHTML = `<pre><code class="language-${file.language.toLowerCase()}">${escapeHtml(file.content)}</code></pre>`;
+            hljs.highlightAll();
+
+            modal.classList.add('active');
+            state.refactorTarget = node;
+            document.getElementById('refactorLangSelector').style.display = 'flex';
+        }
+
+        function closeCodeViewer() {
+            document.getElementById('code-viewer-modal').classList.remove('active');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // ─── Refactor Language Selector ─────────────────────────────────────────
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#refactorLangSelector .lang-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                if (state.refactorTarget) {
+                    generateRefactor(btn.dataset.lang);
+                }
+            });
+        });
+
+        // ─── Demo Mode ───────────────────────────────────────────────────────────
+        document.querySelector('.upload-zone').insertAdjacentHTML('afterend',
+            '<button class="demo-btn" id="demoBtn">LOAD DEMO CODEBASE</button>');
+
+        document.getElementById('demoBtn').addEventListener('click', loadDemoCodebase);
+
+        function loadDemoCodebase() {
+            state.files = [];
+            state.fileMap = {};
+            state.demoMode = true;
+            state.analysis = null;
+
+            // Rebuild the demo graph which will populate state.files with synthetic data
+            const svg = d3.select('#dependency-graph');
+            const width = svg.node().getBoundingClientRect().width;
+            const height = svg.node().getBoundingClientRect().height;
+            buildDemoGraph(svg, width, height);
+
+            // Generate synthetic file contents for demo
+            const demoFiles = state.dependencyGraph.nodes.map(n => ({
+                name: n.id,
+                content: generateDemoFileContent(n),
+                language: n.language,
+                lines: Math.floor(n.loc / 5),
+                loc: n.loc,
+                debtScore: n.debtScore
+            }));
+
+            demoFiles.forEach(f => {
+                state.files.push(f);
+                state.fileMap[f.name] = f;
+            });
+
+            updateUI();
+            alert('Demo codebase loaded — 47-file legacy Java banking system with circular dependencies, god classes, and dead code.');
+        }
+
+        function generateDemoFileContent(node) {
+            const templates = {
+                'Java': `package com.bank.${node.group};
+
+import java.util.*;
+import com.bank.core.BankCore;
+
+/**
+ * ${node.id} - ${node.debtScore > 70 ? 'HIGH DEBT ZONE - tightly coupled' : 'Business logic component'}
+ */
+public class ${node.id.replace('.java', '')} {
+    private BankCore core;
+    private Map<String, Object> cache = new HashMap<>();
+
+    public ${node.id.replace('.java', '')}() {
+        this.core = BankCore.getInstance();
+    }
+
+    public boolean process() {
+        try {
+            // Complex legacy logic
+            List<Object> data = core.getData();
+            if (data == null || data.isEmpty()) {
+                return false;
+            }
+            // FIXME: This method is 500+ lines - needs refactoring
+            return data.size() > 0;
+        } catch (Exception e) {
+            // Swallowing exceptions - dangerous!
+            return false;
+        }
+    }
+
+    // TODO: Replace with proper service layer
+    public void legacyMethod() {
+        // Direct database access - violation of abstraction
+        Connection conn = DriverManager.getConnection("jdbc:derby:bankdb");
+        // ... 200 more lines
+    }
+}`,
+
+                'COBOL': `       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ${node.id.replace('.cobol', '').toUpperCase()}.
+       AUTHOR. LEGACY-DEV-1987.
+       DATE-COMPILED. 87-03-15.
+
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-ACCOUNT-ID        PIC X(10).
+       01  WS-AMOUNT            PIC S9(9)V99 COMP-3.
+       01  WS-RESULT            PIC X(100).
+
+       PROCEDURE DIVISION.
+           PERFORM INITIALIZE-INTERFACE.
+           CALL 'CALCULATION' USING WS-AMOUNT.
+           IF WS-AMOUNT > 1000000
+               MOVE 'EXCEEDS LIMIT' TO WS-RESULT
+           END-IF.
+           STOP RUN.
+
+       INITIALIZE-INTERFACE.
+           * This routine hasn't been touched since 1985
+           MOVE SPACES TO WS-RESULT.`,
+
+                'JavaScript': `// ${node.id} - Frontend integration layer
+// WARNING: Global namespace pollution detected
+
+class ${node.id.replace('.js', '')} {
+    constructor() {
+        this.coreEndpoint = '/api/bank-core';
+        this.cache = {};
+    }
+
+    async fetchData() {
+        // No error handling - direct fetch
+        const response = await fetch(this.coreEndpoint);
+        return response.json();
+    }
+
+    // Deprecated: Use new TransactionService instead
+    legacyRender(containerId) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        // 150 lines of jQuery-style DOM manipulation
+        el.innerHTML = '<div>legacy</div>';
+    }
+}`,
+
+                'SQL': `-- ${node.id}
+-- Generated by Hibernate 3.2 (ancient)
+-- DO NOT MODIFY - auto-regenerated daily
+
+SELECT a.*, b.*, c.*
+FROM ACCOUNTS a
+JOIN CUSTOMERS b ON a.customer_id = b.id
+JOIN TRANSACTIONS c ON a.id = c.account_id
+LEFT JOIN LEGACY_TABLE d ON a.legacy_id = d.id
+WHERE a.status = 'ACTIVE'
+-- Missing index on status column causes full table scan
+-- Consider adding: CREATE INDEX idx_accounts_status ON ACCOUNTS(status)
+ORDER BY a.created_date DESC;`,
+
+                'XML': `<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Legacy Spring 2.0 config -->
+    <beans>
+        <bean id="bankCore" class="com.bank.core.BankCore">
+            <property name="dataSource" ref="dataSource"/>
+            <property name="maxConnections" value="5"/>
+        </bean>
+
+        <!-- Circular dependency: this bean references itself -->
+        <bean id="circularBean" class="com.bank.util.CircularDependency">
+            <property name="dependency" ref="circularBean"/>
+        </bean>
+    </beans>
+</configuration>`
+            };
+
+            return templates[node.language] || `// ${node.id}\n// Legacy code (${node.language})\n// Lines of Code: ${node.loc}\n// Debt Score: ${node.debtScore}/100`;
+        }
+
+        // ─── Toolbar Filters ─────────────────────────────────────────────────────
+        document.querySelectorAll('.toolbar-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.view) {
+                    document.querySelectorAll('.toolbar-btn[data-view]').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    // Toggle cluster/flat view logic would go here
+                }
+                if (btn.dataset.filter) {
+                    btn.classList.toggle('active');
+                    filterGraph(btn.dataset.filter, btn.classList.contains('active'));
+                }
+            });
+        });
+
+        function filterGraph(filterType, active) {
+            const nodes = d3.selectAll('.node-group');
+            nodes.classed('highlighted', d => {
+                if (!active) return false;
+                if (filterType === 'danger' && d.debtScore > 70) return true;
+                if (filterType === 'dead' && d.debtScore < 15) return true;
+                return false;
+            });
+        }
+
+        // ─── Claude API Integration ──────────────────────────────────────────────
+        let anthropicKey = localStorage.getItem('chronos_anthropic_key') || '';
+        if (!anthropicKey) {
+            anthropicKey = prompt('Enter Anthropic API Key (required):', '');
+            if (anthropicKey) {
+                localStorage.setItem('chronos_anthropic_key', anthropicKey);
+            } else {
+                alert('API key required for AI analysis. Demo mode features only.');
+            }
+        }
+        state.anthropicKey = anthropicKey;
+
+        async function callClaude(messages, systemPrompt = defaultSystemPrompt) {
+            if (!state.anthropicKey) {
+                return '⚠️ ANTHROPIC API KEY MISSING — Please enter your key to use AI analysis features.';
+            }
+
+            try {
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': state.anthropicKey,
+                        'anthropic-version': '2023-06-01',
+                        'anthropic-dangerous-direct-browser-access': 'true'
+                    },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 4000,
+                        system: systemPrompt,
+                        messages: messages
+                    })
+                });
+
+                if (!response.ok) throw new Error(`API error: ${response.status}`);
+                const data = await response.json();
+                return data.content[0].text;
+            } catch (err) {
+                return `⚠️ SIGNAL LOST — RETRYING...\nError: ${err.message}\n\n(Fallback: Anthropic API unavailable. Check your internet connection or API key.)`;
+            }
+        }
+
+        const defaultSystemPrompt = `You are Chronos, an expert legacy code archaeologist with 30 years of experience in enterprise software modernization. You specialize in COBOL, early Java, C, and ancient JavaScript systems. You communicate findings with surgical precision: concrete, actionable, no fluff. You understand the business risk of touching legacy systems and always balance technical idealism with enterprise pragmatism. Format output with clear sections using ASCII dividers (═══) for structure. Use code blocks for all code samples. Be decisive — give recommendations, not options.`;
+
+        // ─── Excavation Report ────────────────────────────────────────────────────
+        document.querySelector('.demo-btn').addEventListener('click', async () => {
+            const emptyState = document.getElementById('excavationEmpty');
+            const reportDiv = document.getElementById('excavationReport');
+            const reportContent = document.getElementById('excavationReport');
+
+            emptyState.style.display = 'none';
+            reportDiv.style.display = 'block';
+            reportDiv.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>CHRONOS ANALYZING...</span></div>';
+
+            const manifest = state.files.map(f => `${f.name} (${f.language}, ${f.loc} LOC)`).join('\n');
+            const userMessage = `ANALYZE THIS CODEBASE MANIFEST:\n\n${manifest}\n\nProvide excavation report with:\n1. Executive summary of what this codebase does\n2. Primary business domain\n3. Architecture pattern detected\n4. Top 5 critical load-bearing files\n5. Tech debt score (0-100) with reasoning\n6. Risk assessment: "What breaks if we touch X?"`;
+
+            const response = await callClaude([{ role: 'user', content: userMessage }]);
+            reportDiv.innerHTML = formatReport(response);
+        });
+
+        function formatReport(text) {
+            return text.split('\n').map(line => {
+                if (line.startsWith('═══')) {
+                    return `<hr style="border-color: var(--amber-dim); margin: 24px 0;">`;
+                } else if (line.startsWith('##') || line.startsWith('# ')) {
+                    return `<div class="section-title">${line.replace(/^#+\s*/, '')}</div>`;
+                } else if (line.startsWith('```')) {
+                    return ''; // Handled differently
+                } else {
+                    return `<div>${line}</div>`;
+                }
+            }).join('');
+        }
+
+        // ─── Terminal ─────────────────────────────────────────────────────────────
+        const terminalInput = document.getElementById('terminalInput');
+        const terminalOutput = document.getElementById('terminalOutput');
+
+        terminalInput.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter' && terminalInput.value.trim()) {
+                const command = terminalInput.value.trim();
+                terminalInput.value = '';
+
+                // Echo command
+                terminalOutput.innerHTML += `<div><span class="terminal-prompt">chronos@archaeologist:~$</span> ${escapeHtml(command)}</div>`;
+
+                // Process command
+                const response = await processTerminalCommand(command);
+                terminalOutput.innerHTML += `<div>${response}</div>`;
+                terminalOutput.scrollTop = terminalOutput.scrollHeight;
+            }
+        });
+
+        async function processTerminalCommand(cmd) {
+            const args = cmd.split(' ');
+            const command = args[0].toLowerCase();
+
+            if (command === 'help') {
+                return `Available commands:
+  scan --deep            → Deep scan of codebase issues
+  test --legacy          → Identify failing test scenarios
+  deps --outdated        → List probable outdated dependencies
+  refactor [filename]    → Generate refactor blueprint
+  explain [filename]     → Plain English explanation
+  risk-score            → Overall migration risk (1-10)
+  clear                 → Clear terminal`;
+
+            } else if (command === 'clear') {
+                terminalOutput.innerHTML = '';
+                return '';
+
+            } else if (command === 'scan' && args[1] === '--deep') {
+                const response = await callClaude([{
+                    role: 'user',
+                    content: `Perform a deep scan on this ${state.files.length}-file codebase. Identify:\n- Code smells\n- Security vulnerabilities\n- Performance bottlenecks\n- Architectural violations\nBe specific and actionable.`
+                }]);
+                return response;
+
+            } else if (command === 'test' && args[1] === '--legacy') {
+                const response = await callClaude([{
+                    role: 'user',
+                    content: `This codebase has no tests. Identify test scenarios that would likely fail:\n- Edge cases developers missed\n- Data validation gaps\n- Error handling holes\n- Integration failure points\nList specific examples.`
+                }]);
+                return response;
+
+            } else if (command === 'deps' && args[1] === '--outdated') {
+                const response = await callClaude([{
+                    role: 'user',
+                    content: `Based on code patterns, identify probably-outdated dependencies:\n- Framework versions (Spring, .NET, etc.)\n- Database drivers\n- Build tools\n- Security vulnerabilities\nFormat as: PACKAGE | CURRENT (estimated) | SECURITY RISK`
+                }]);
+                return response;
+
+            } else if (command === 'risk-score') {
+                const response = await callClaude([{
+                    role: 'user',
+                    content: `Rate overall migration risk 1-10 for a ${state.files.length}-file mixed ${Object.keys(state.fileMap).map(f => state.fileMap[f].language).join(', ')} codebase. Give:\n1. Numeric score\n2. Three-word risk level\n3. One-sentence rationale\n4. Biggest showstopper`
+                }]);
+                return response;
+
+            } else if (command === 'refactor' && args[1]) {
+                const filename = args[1];
+                const file = state.fileMap[filename];
+                if (!file) return `File not found: ${filename}`;
+
+                const response = await callClaude([{
+                    role: 'user',
+                    content: `Refactor this legacy file:\n\nFilename: ${filename}\nLanguage: ${file.language}\n\n${file.content}\n\nProvide TypeScript rewrite with detailed migration notes.`
+                }]);
+                return response;
+
+            } else if (command === 'explain' && args[1]) {
+                const filename = args[1];
+                const file = state.fileMap[filename];
+                if (!file) return `File not found: ${filename}`;
+
+                const response = await callClaude([{
+                    role: 'user',
+                    content: `Explain this ${file.language} file in plain English:\n\n${file.content}\n\nBreak down:\n- What it does\n- Key functions/classes\n- External dependencies\n- Hidden gotchas`
+                }]);
+                return response;
+
+            } else if (command === 'rosebud') {
+                return `🔍 ARCHIVAL DEEP SCAN INITIATED...\n\nFound: 1987 COBOL subroutine "ROSEBUD-83" in /legacy/src/\n\n/* ROSE-83: CUSTOMER BONUS CALCULATION\n   LAST MODIFIED: 12/17/1987 by J.TANNER\n   NEVER TOUCHED SINCE — powers 23% of revenue\n\n   DETAILS:\n   - Calculates customer loyalty bonuses using magic numbers\n   - HARD-CODED THRESHOLD: 10,000 units\n   - Returns "SURPRISE" value 83% of the time\n   - Known bug: Off-by-one on leap years\n\n   RISK: HIGH — generates $2.3M in annual bonuses\n*/`;
+
+            } else {
+                return `Command not recognized: ${command}. Type 'help' for available commands.`;
+            }
+        }
+
+        // ─── Refactor Blueprint ───────────────────────────────────────────────────
+        document.getElementById('refactorLangSelector').addEventListener('click', async (e) => {
+            if (e.target.classList.contains('lang-btn')) {
+                document.querySelectorAll('#refactorLangSelector .lang-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                if (state.refactorTarget) {
+                    await generateRefactor(e.target.dataset.lang);
+                }
+            }
+        });
+
+        async function generateRefactor(targetLang) {
+            const file = state.fileMap[state.refactorTarget.id];
+            if (!file) return;
+
+            const tabContent = document.getElementById('tab-refactor');
+            const emptyState = tabContent.querySelector('.empty-state');
+            const contentDiv = document.getElementById('refactorContent');
+
+            emptyState.style.display = 'none';
+            contentDiv.style.display = 'block';
+            contentDiv.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>GENERATING REFACTOR BLUEPRINT...</span></div>';
+
+            const systemPrompt = `You are a senior software architect specializing in legacy code modernization. Provide clear, actionable refactoring guidance.`;
+
+            const messages = [{
+                role: 'user',
+                content: `Refactor this ${file.language} file to ${targetLang.toUpperCase()}:\n\nFilename: ${file.name}\nOriginal LOC: ${file.loc}\n\n${file.content}\n\nProvide:\n1. Plain English explanation (2-3 paragraphs)\n2. Full ${targetLang.toUpperCase()} rewrite\n3. Migration risks and edge cases\n4. Estimated effort (lines changed, test coverage needed)\n\nShow diff using --- original --- and --- refactored --- sections.`
+            }];
+
+            const response = await callClaude(messages, systemPrompt);
+
+            // Parse and format the response
+            contentDiv.innerHTML = formatRefactorResponse(response, targetLang);
+        }
+
+        function formatRefactorResponse(text, lang) {
+            // Simple formatter - split into sections
+            const sections = text.split('\n\n');
+            let html = '';
+
+            sections.forEach(section => {
+                if (section.startsWith('```')) {
+                    // Code block
+                    const code = section.replace(/```[\w]*\n?/g, '');
+                    html += `<div class="code-block"><pre><code class="language-${lang}">${escapeHtml(code)}</code></pre></div>`;
+                } else if (section.includes('---') || section.includes('===')) {
+                    html += `<hr style="border-color: var(--amber-dim); margin: 16px 0;">`;
+                } else {
+                    html += `<div class="section-content">${escapeHtml(section)}</div>`;
+                }
+            });
+
+            return html;
+        }
+
+        // ─── Graph Click Node Selection ──────────────────────────────────────────
+        async function selectNode(node) {
+            state.refactorTarget = node;
+
+            // Switch to refactor tab
+            document.querySelector('[data-tab="refactor"]').click();
+            document.getElementById('refactorLangSelector').style.display = 'flex';
+
+            // Auto-generate refactor
+            await generateRefactor('ts');
+        }
+
+        // Hack to inject selectNode into global scope
+        window.selectNode = selectNode;
+        window.closeCodeViewer = closeCodeViewer;
+
+        // ─── Dependency Map Analysis ─────────────────────────────────────────────
+        document.querySelector('[data-tab="deps"]').addEventListener('click', async () => {
+            if (!state.analysis && state.files.length > 0) {
+                const tab = document.getElementById('tab-deps');
+                tab.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>ANALYZING DEPENDENCY GRAPH...</span></div>';
+
+                const graphData = JSON.stringify({
+                    nodes: state.dependencyGraph.nodes.map(n => ({ id: n.id, loc: n.loc, debtScore: n.debtScore })),
+                    links: state.dependencyGraph.links.map(l => ({
+                        source: typeof l.source === 'object' ? l.source.id : l.source,
+                        target: typeof l.target === 'object' ? l.target.id : l.target
+                    }))
+                });
+
+                const response = await callClaude([{
+                    role: 'user',
+                    content: `Analyze this dependency graph data: ${graphData}\n\nIdentify:\n1. Circular dependencies (list specific files)\n2. God classes/files (everything depends on them)\n3. Dead code candidates (no dependencies)\n4. Tightly coupled module clusters\n5. Prioritized refactoring roadmap\n\nBe specific with filenames.`
+                }]);
+
+                tab.innerHTML = `
+                    <div class="report-section">
+                        <div class="section-title">DEPENDENCY ANALYSIS</div>
+                        <div class="section-content">${response.replace(/\n/g, '<br>')}</div>
+                    </div>
+                `;
+            }
+        });
+
+        // ─── Earliest possible trigger for excavation analysis ───────────────────
+        // Also trigger when demo button clicked (handled above in demo section)
+        // Need to also handle when non-demo files uploaded
+        const originalUpdateUI = updateUI;
+        updateUI = function() {
+            originalUpdateUI();
+            // If we have files and no analysis yet, trigger excavation
+            if (state.files.length > 0 && !state.analysis && !state.demoMode) {
+                // Wait a beat then auto-trigger excavation
+                setTimeout(() => {
+                    const excavationTab = document.getElementById('tab-excavation');
+                    const emptyState = document.getElementById('excavationEmpty');
+                    const reportDiv = document.getElementById('excavationReport');
+
+                    emptyState.style.display = 'none';
+                    reportDiv.style.display = 'block';
+                    reportDiv.innerHTML = '<div class="analysis-loading"><div class="spinner"></div><span>CHRONOS ANALYZING...</span></div>';
+
+                    const manifest = state.files.map(f => `${f.name} (${f.language}, ${f.loc} LOC)`).join('\n');
+                    callClaude([{ role: 'user', content: `ANALYZE THIS CODEBASE MANIFEST:\n\n${manifest}\n\nProvide excavation report with:\n1. Executive summary of what this codebase does\n2. Primary business domain\n3. Architecture pattern detected\n4. Top 5 critical load-bearing files\n5. Tech debt score (0-100) with reasoning\n6. Risk assessment` }]).then(response => {
+                        reportDiv.innerHTML = formatReport(response);
+                    });
+                }, 1500);
+            }
+        };
+
+    </script>
+</body>
+</html>
