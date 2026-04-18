@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Build dependency graph (simplified)
-    const nodes = files.map(f => ({
+     const nodes = files.map((f: any) => ({
       id: f.path,
       name: f.name,
       language: f.language || 'Text',
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
         statistics: {
           filesAnalyzed: files.length,
           dependenciesMapped: links.length,
-          avgDebtScore: nodes.reduce((sum, n) => sum + n.debtScore, 0) / nodes.length,
+           avgDebtScore: nodes.reduce((sum: number, n: any) => sum + n.debtScore, 0) / nodes.length,
         },
         results: {
           nodes,
@@ -75,8 +75,8 @@ export async function POST(request: NextRequest) {
             executiveSummary: `Scanned ${nodes.length} files with ${links.length} dependencies.`,
             businessDomain: 'Mixed technology stack',
             architecturePattern: 'Monolithic with tight coupling',
-            criticalFiles: nodes.filter(n => n.debtScore > 70).slice(0, 5).map(n => n.id),
-            debtScore: Math.round(nodes.reduce((sum, n) => sum + n.debtScore, 0) / nodes.length),
+            criticalFiles: nodes.filter((n: any) => n.debtScore > 70).slice(0, 5).map((n: any) => n.id),
+            debtScore: Math.round(nodes.reduce((sum: number, n: any) => sum + n.debtScore, 0) / nodes.length),
             riskAssessment: 'Moderate risk. Focus on high-debt files first.',
           },
         },
@@ -88,8 +88,8 @@ export async function POST(request: NextRequest) {
       where: { id: repositoryId },
       data: {
         totalFiles: nodes.length,
-        totalLines: nodes.reduce((sum, n) => sum + n.loc, 0),
-        techDebtScore: Math.round(nodes.reduce((sum, n) => sum + n.debtScore, 0) / nodes.length),
+        totalLines: nodes.reduce((sum: number, n: any) => sum + n.loc, 0),
+        techDebtScore: Math.round(nodes.reduce((sum: number, n: any) => sum + n.debtScore, 0) / nodes.length),
         lastScanAt: new Date(),
       },
     });
